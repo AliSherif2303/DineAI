@@ -648,12 +648,14 @@ class GeneratorStage(BasePipelineStage):
             for i, candidate in enumerate(context.ranked_candidates, 1):
 
                 meta = {}
+                obj = candidate
+                while hasattr(obj, "candidate"):
+                    if isinstance(obj, dict):
+                        break
+                    obj = getattr(obj, "candidate")
 
-                if hasattr(candidate, "metadata"):
-                    meta = candidate.metadata
-
-                elif hasattr(candidate, "candidate") and hasattr(candidate.candidate, "metadata"):
-                    meta = candidate.candidate.metadata
+                if hasattr(obj, "metadata"):
+                    meta = obj.metadata
 
                 print(f"\nCandidate #{i}")
 

@@ -184,14 +184,25 @@ class PromptRegistry:
 
 def _get_metadata(candidate: Any) -> Dict[str, Any]:
     """Helper to extract metadata dictionary from a candidate or CandidateFilterResult."""
-    obj = getattr(candidate, "candidate", candidate)
+    obj = candidate
+    while hasattr(obj, "candidate"):
+        if isinstance(obj, dict):
+            break
+        obj = getattr(obj, "candidate")
+        
     if isinstance(obj, dict):
-        return obj
-    if hasattr(obj, "metadata") and isinstance(obj.metadata, dict):
-        return obj.metadata
-    if hasattr(obj, "__dict__"):
-        return obj.__dict__
-    return {}
+        meta = obj
+    elif hasattr(obj, "metadata") and isinstance(obj.metadata, dict):
+        meta = obj.metadata
+    elif hasattr(obj, "__dict__"):
+        meta = obj.__dict__
+    else:
+        meta = {}
+        
+    if meta and "recipe_name" in meta and "name" not in meta:
+        meta = dict(meta)
+        meta["name"] = meta["recipe_name"]
+    return meta
 
 
 # ============================================================================
