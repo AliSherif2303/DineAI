@@ -59,12 +59,12 @@ class LLMConfig:
 @dataclass
 class GenerationConfig:
     """Configuration settings governing response generation parameters."""
-    temperature: float = 0.7
+    temperature: float = 0.1
     top_p: float = 0.9
-    top_k: int = 50
-    max_new_tokens: int = 512
+    top_k: int = 40
+    max_new_tokens: int = 384
     min_new_tokens: int = 1
-    do_sample: bool = True
+    do_sample: bool = False
     repetition_penalty: float = 1.1
     stream: bool = False
     seed: Optional[int] = None
@@ -525,6 +525,7 @@ class GeneratorEngine:
     def __init__(self, config: Optional[LLMConfig] = None):
         self.config = config or LLMConfig()
         self.config.validate()
+        self._provider = None
 
     def generate(self, request: GenerationRequest) -> GenerationResponse:
         """Processes request payload: runs cache lookups, routes execution, runs validations, and returns formatted responses."""
@@ -542,8 +543,10 @@ class GeneratorEngine:
             if cached_res is not None:
                 return cached_res
 
-        # 2. Retrieve provider instance from Registry
-        provider = ProviderRegistry.get(provider_name, self.config)
+        # 2. Retrieve provider instance from Registry (reusing cached provider)
+        if self._provider is None or self._provider.config.provider != provider_name:
+            self._provider = ProviderRegistry.get(provider_name, self.config)
+        provider = self._provider
 
         # 3. Model generation & memory tracing
         start_time = time.perf_counter()

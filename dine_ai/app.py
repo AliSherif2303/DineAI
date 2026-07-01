@@ -625,6 +625,7 @@ class GeneratorStage(BasePipelineStage):
     def __init__(self, generator_config: Optional[LLMConfig] = None):
         super().__init__()
         self.generator_config = generator_config or LLMConfig(provider="mock")
+        self.engine = GeneratorEngine(self.generator_config)
 
     def validate_input(self, context: PipelineContext) -> None:
         if context.prompt_result is None:
@@ -634,7 +635,7 @@ class GeneratorStage(BasePipelineStage):
         self.validate_input(context)
         start = time.perf_counter()
 
-        engine = GeneratorEngine(self.generator_config)
+        engine = self.engine
         request = GenerationRequest(
             prompt_result=context.prompt_result,
             generation_config=GenerationConfig()
@@ -963,11 +964,23 @@ class DineAIApplication:
         )
 
         # Generator stage — driven solely by llm_provider and llm_model; embedding config is never consulted here
+        try:
+            import torch
+            cuda_available = torch.cuda.is_available()
+        except ImportError:
+            cuda_available = False
+
+        quant = "4bit" if (cuda_available and self.config.llm_provider.lower() == "qwen") else None
+        device = "cuda" if cuda_available else "cpu"
+
         gen_config = LLMConfig(
             provider=self.config.llm_provider,
             model_name=self.config.llm_model,
             execution_mode=self.config.execution_mode,
-            use_cache=self.config.cache_enabled
+            use_cache=self.config.cache_enabled,
+            device=device,
+            quantization=quant,
+            clear_cuda_after_generation=False
         )
         self.pipeline_manager.register_stage(
             "Generator", 
