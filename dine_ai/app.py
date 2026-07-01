@@ -307,7 +307,12 @@ class RestaurantManager:
         self.available_columns: List[str] = []
         self.restaurant_config: Dict[str, Any] = {}
 
-    def load_restaurant(self, restaurant_name: str, embedding_provider: str = "mock") -> Dict[str, Any]:
+    def load_restaurant(
+        self, 
+        restaurant_name: str, 
+        embedding_provider: str = "mock",
+        embedding_model: str = "BAAI/bge-small-en-v1.5"
+    ) -> Dict[str, Any]:
         """Loads restaurant config, and database assets from disk, delegating to DatasetManager.
         
         Only the embedding subsystem determines the provider strategy here.
@@ -320,7 +325,16 @@ class RestaurantManager:
         if embedding_provider == "mock":
             pipeline = DatasetPipeline(embedding_provider=MockEmbeddingProvider())
         else:
-            pipeline = DatasetPipeline(embedding_provider=SentenceTransformerProvider())
+            try:
+                import torch
+                device = "cuda" if torch.cuda.is_available() else "cpu"
+            except ImportError:
+                device = "cpu"
+            pipeline = DatasetPipeline(embedding_provider=SentenceTransformerProvider(
+                model_name=embedding_model,
+                device=device,
+                normalize_embeddings=True
+            ))
             
         dataset_manager = DatasetManager(dataset_directory=self.dataset_directory, pipeline=pipeline)
         dataset = dataset_manager.load_restaurant(restaurant_name)
@@ -812,7 +826,8 @@ class DineAIApplication:
         # 1. Load active restaurant datasets (embedding_provider determines strategy; LLM config is never consulted)
         self.restaurant_manager.load_restaurant(
             self.config.restaurant_name,
-            embedding_provider=self.config.embedding_provider
+            embedding_provider=self.config.embedding_provider,
+            embedding_model=self.config.embedding_model
         )
         self.state.dataset_loaded = True
         self.state.faiss_loaded = True
@@ -827,6 +842,19 @@ class DineAIApplication:
             except ImportError:
                 logger.warning("sentence-transformers not installed. Falling back to MockEmbeddingModel.")
                 self.embedding_model = MockEmbeddingModel()
+
+        # Load the embedding model using resolved config
+        try:
+            import torch
+            device = "cuda" if torch.cuda.is_available() else "cpu"
+        except ImportError:
+            device = "cpu"
+        emb_config = EmbeddingConfig(
+            model_name=self.config.embedding_model,
+            device=device,
+            normalize_embeddings=True
+        )
+        self.embedding_model.load(emb_config)
 
         # 3. Construct default pipeline stages
         self._setup_default_pipeline()
@@ -943,7 +971,8 @@ class DineAIApplication:
         logger.info(f"DineAIApplication: Reloading active restaurant '{self.config.restaurant_name}'...")
         self.restaurant_manager.load_restaurant(
             self.config.restaurant_name,
-            embedding_provider=self.config.embedding_provider
+            embedding_provider=self.config.embedding_provider,
+            embedding_model=self.config.embedding_model
         )
         self.emit_event(ApplicationEventType.DATASET_RELOADED, {"restaurant": self.config.restaurant_name})
 
@@ -952,7 +981,8 @@ class DineAIApplication:
         logger.info(f"DineAIApplication: Switching restaurant to '{restaurant_name}'...")
         self.restaurant_manager.load_restaurant(
             restaurant_name,
-            embedding_provider=self.config.embedding_provider
+            embedding_provider=self.config.embedding_provider,
+            embedding_model=self.config.embedding_model
         )
         self.config.restaurant_name = restaurant_name
         self.emit_event(ApplicationEventType.RESTAURANT_SWITCHED, {"restaurant": restaurant_name})
