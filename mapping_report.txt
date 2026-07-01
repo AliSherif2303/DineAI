@@ -1,0 +1,32 @@
+================================================================================
+                          DINEAI SCHEMA MAPPING REPORT                          
+================================================================================
+MAPPING STATISTICS:
+--------------------------------------------------------------------------------
+  Total Input Columns   : 8
+  Mapped Columns        : 6
+  Unmapped/Rejected     : 2
+  Mapping Coverage      : 75.00%
+================================================================================
+MAPPED COLUMNS:
+--------------------------------------------------------------------------------
+  Source Column                       | Target Canonical Field       | Status  
+--------------------------------------------------------------------------------
+  dish_name                           | recipe_name                  | MAPPED  
+  calories                            | calories_per_serving         | MAPPED  
+  protein                             | protein_g_per_serving        | MAPPED  
+  carbs                               | carbs_g_per_serving          | MAPPED  
+  fat                                 | fat_g_per_serving            | MAPPED  
+  price                               | price                        | MAPPED  
+================================================================================
+UNMAPPED / REJECTED COLUMNS:
+--------------------------------------------------------------------------------
+  Source Column                       | Reason / Diagnosis                    
+--------------------------------------------------------------------------------
+  title                               | REJECTED - Duplicate of 'dish_name'   
+  unknown_column                      | UNKNOWN - No matching canonical alias 
+================================================================================
+MAPPING WARNINGS / REJECTIONS LOG:
+--------------------------------------------------------------------------------
+  [WARN] Duplicate mapping rejected: Column 'title' was rejected because canonical field 'recipe_name' is already mapped to by 'dish_name'.
+================================================================================

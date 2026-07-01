@@ -1,0 +1,110 @@
+# Walkthrough - DineAI Ranking & Prompt Engineering Frameworks
+
+We have successfully designed, implemented, and verified the complete **Ranking Framework** (in [ranking.py](file:///d:/data/AI_WAITER/dine_ai/retrieval/ranking.py)) and **Prompt Engineering Framework** (in [prompts.py](file:///d:/data/AI_WAITER/dine_ai/llm/prompts.py)) for the DineAI platform. Both modules conform strictly to SOLID design principles, Clean Architecture, and patterns like Builder, Strategy, and Registry.
+
+---
+
+## 1. DineAI Ranking & Multi-Objective Optimization Framework
+
+Located in [ranking.py](file:///d:/data/AI_WAITER/dine_ai/retrieval/ranking.py), this framework scores, normalizes, optimizes, and ranks candidates passing the filtering phase.
+
+### Core Architecture & Strategy Patterns
+* **Pluggable Scorers**: A unified `BaseScorer` exposes custom scoring batches. 11 scorers were implemented out-of-the-box (Semantic, Soft-Rule, Nutrition, Rating, Popularity, Price, Freshness, Metadata, Penalty, Diversity, and Custom) and are dynamically registerable via `RankingRegistry`.
+* **Standard & Multi-Objective Execution**:
+  * **Factor-Based**: Weighted linear scoring, optionally applying sequential MMR-lite category diversity penalties.
+  * **Multi-Objective Optimization**: Supports trade-offs across independent business goals (e.g. Maximizing Protein, Minimizing Price) via `WeightedObjectiveOptimizer` and exposes clean interfaces for outranking stubs (TOPSIS, Pareto, PROMETHEE, etc.).
+* **Trade-off Conflict Detection**: Computes pairwise Pearson correlation coefficients across candidates. If conflicting objectives (e.g. Maximize Protein vs Minimize Price) move together, it reports a correlation tradeoff warning in the telemetry report.
+* **Explainability**: Every candidate is compiled with a `RankingExplanation` describing raw/normalized scores, factor contributions, applied bonuses/penalties, and objective conflicts.
+
+### Test Verification
+The standalone suite successfully verified:
+* **Ordering changes**: Adjusting factor weights (e.g. Price) correctly re-orders candidates.
+* **Diversity Penalties**: Repetitive burger entries were correctly penalized, promoting vegan salads to rank 2.
+* **Objective Conflict warnings**: Effectively flagged positive correlation between maximized protein and minimized price as a conflict trade-off.
+
+---
+
+## 2. DineAI Enterprise Prompt Engineering Framework
+
+Located in [prompts.py](file:///d:/data/AI_WAITER/dine_ai/llm/prompts.py), this module manages the assembly, optimization, and budget manager of prompts sent to the LLM.
+
+### Core Architecture & Builder Patterns
+* **Strategic Components**: Direct subclasses of `BasePromptComponent` (System, Restaurant, Context, Language, Persona, Safety, Formatting, Recommendation, Conversation, FewShot) implement isolated section-building behaviors.
+* **Fluent PromptBuilder**: Implements fluent chaining APIs to construct prompts from templates:
+  ```python
+  config = PromptConfig()
+  builder = PromptBuilder(config)
+  builder.use_template("RestaurantChat").set_language("Arabic").set_persona("FriendlyWaiter").set_context(ctx)
+  result = builder.build()
+  ```
+* **Label Localization**: Translates context properties dynamically (e.g., translating "Recipe Name" to "اسم الوصفة" in Arabic) using translation maps, without modifying underlying metadata.
+* **Token Budget Management**: Analyzes character heuristics. If token counts exceed budgets, it runs prioritized sliding windows (on memory logs) and `ContextCompressor` passes (Top-K candidate reduction, summary reduction, micro-nutrition and ingredient list truncation) to guarantee LLM context compatibility.
+* **Validation checks**: The `PromptValidator` checks templates pre-optimization for duplicates, negative priorities, and missing system instructions.
+
+### Test Verification
+The standalone suite (run via `python dine_ai/llm/prompts.py`) successfully verified:
+* **Builder & Plugins**: Correctly registered and built custom vision-prompt plugins.
+* **Localization**: Renders Arabic and Spanish translations dynamically.
+* **Budget Trimming**: Tiny token limits triggered sliding memory windows and recipe metadata removal.
+
+---
+
+## Output Demonstration Reports
+
+### Enterprise Ranking Report
+```
+================================================================================
+           DineAI Framework - Enterprise Ranking & Optimization Report          
+================================================================================
+ Optimization Strategy  : Multi-Objective (weighted)
+ Total Candidates Ranked: 4
+ Total Execution Time   : 1.32 ms
+ Average Ranking Score  : 0.5214
+ Highest Ranking Score  : 0.5314
+--------------------------------------------------------------------------------
+ ACTIVE OBJECTIVES DEFINITIONS:
+  * protein                   [Weight: 0.40, Priority: 0, Direction: Maximize]
+  * price                     [Weight: 0.30, Priority: 0, Direction: Minimize]
+  * calories                  [Weight: 0.20, Priority: 0, Direction: Minimize]
+  * rating                    [Weight: 0.10, Priority: 0, Direction: Maximize]
+--------------------------------------------------------------------------------
+ CONFLICTING OBJECTIVES DETECTED (NEGATIVELY CORRELATED):
+  ! calories vs rating (Correlation: +0.27)
+  ! price vs rating (Correlation: +0.80)
+  ! protein vs calories (Correlation: +0.98)
+  ! protein vs price (Correlation: +0.90)
+--------------------------------------------------------------------------------
+ TOP RANKED CANDIDATES DISTRIBUTION:
+  Rank   | Candidate Name / Row ID        | Score      | Primary Driver / Breakdown
+  ----------------------------------------------------------------------------
+  [1]    | Vegan Salad                    | 0.5314     | price (+0.26), calories (+0.20)
+  [2]    | Basic Burger                   | 0.5282     | price (+0.30), protein (+0.12)
+  [3]    | Spicy Wings                    | 0.5262     | protein (+0.22), price (+0.20)
+  [4]    | Truffle Burger                 | 0.5000     | protein (+0.40), rating (+0.10)
+================================================================================
+```
+
+### Enterprise Prompt Report
+```
+================================================================================
+         DineAI Prompt Framework - Enterprise Prompt Engineering Report         
+================================================================================
+ Characters Count   : 1584
+ Estimated Tokens   : 396 (Budget limit: 1000)
+ Prompt Hash        : e2e2baa0b8995500...
+--------------------------------------------------------------------------------
+ COMPILED ACTIVE SECTIONS IN ORDER:
+  1. SystemPrompt
+  2. PersonaPrompt
+  3. RestaurantPrompt
+  4. SafetyPrompt
+  5. LanguagePrompt
+  6. RecommendationPrompt
+  7. FormattingPrompt
+  8. FewShotPrompt
+  9. ContextPrompt
+  10. ConversationPrompt
+--------------------------------------------------------------------------------
+ VALIDATION STATUS: SUCCESS (0 anomalies detected)
+================================================================================
+```

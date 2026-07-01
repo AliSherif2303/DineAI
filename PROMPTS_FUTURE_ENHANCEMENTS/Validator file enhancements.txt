@@ -1,0 +1,360 @@
+You are a Principal Python Software Architect with extensive experience designing enterprise ETL pipelines, backend frameworks, validation engines, and reusable AI infrastructures.
+
+I am building a production-ready framework called DineAI.
+
+The current validator.py implementation is fully functional and follows SOLID principles.
+
+Current architecture includes:
+
+- ValidationResult (dataclass)
+- BaseValidator (abstract class)
+- RequiredColumnsValidator
+- DuplicateColumnsValidator
+- EmptyDatasetValidator
+- MissingValuesValidator
+- DataTypeValidator
+- BusinessRulesValidator
+- DataFrameValidator (Pipeline Coordinator)
+
+The validator already supports:
+
+- Chain of Responsibility
+- Stateless execution
+- Enterprise validation report
+- Validation statistics
+- Custom validator injection
+- Business rule validation
+
+I DO NOT want a redesign.
+
+I ONLY want production-level improvements while preserving the public API.
+
+The current API MUST remain unchanged.
+
+Example:
+
+validator = DataFrameValidator()
+
+result = validator.validate(df)
+
+DataFrameValidator.generate_report(result)
+
+==================================================
+OBJECTIVES
+==================================================
+
+Refactor the internals only.
+
+Improve maintainability.
+
+Improve scalability.
+
+Improve extensibility.
+
+Avoid breaking changes.
+
+Follow enterprise software engineering practices.
+
+==================================================
+IMPROVEMENT 1
+Business Rule Engine
+==================================================
+
+The current BusinessRulesValidator contains multiple if statements such as:
+
+if column == "price":
+
+if column == "protein_g_per_serving":
+
+Replace this implementation with a configurable Rule Engine.
+
+Requirements:
+
+- Create reusable validation rule classes.
+
+Examples:
+
+PositiveValueRule
+
+GreaterThanZeroRule
+
+RangeRule
+
+NonEmptyStringRule
+
+Future rules should be pluggable.
+
+BusinessRulesValidator should simply iterate through configured rules.
+
+No hardcoded if statements.
+
+==================================================
+IMPROVEMENT 2
+ValidationMessage Object
+==================================================
+
+Currently ValidationResult stores
+
+errors: List[str]
+
+warnings: List[str]
+
+Replace string messages with a structured dataclass.
+
+Example:
+
+ValidationMessage
+
+Fields:
+
+validator_name
+
+severity
+
+column_name
+
+row_index
+
+invalid_value
+
+message
+
+code
+
+timestamp (optional)
+
+ValidationResult should store
+
+List[ValidationMessage]
+
+instead of strings.
+
+This should make exporting reports much easier.
+
+==================================================
+IMPROVEMENT 3
+Validation Status Enum
+==================================================
+
+Replace
+
+PASS
+
+FAILED
+
+WARNING
+
+ERROR
+
+with an Enum.
+
+Example
+
+ValidationStatus
+
+PASS
+
+WARNING
+
+FAILED
+
+ERROR
+
+Avoid magic strings.
+
+==================================================
+IMPROVEMENT 4
+Business Rules Registry
+==================================================
+
+Move business rule configuration outside the validator.
+
+Instead of:
+
+if column == ...
+
+Use:
+
+BUSINESS_RULES = {
+
+"price": [
+
+PositiveValueRule()
+
+],
+
+"servings":[
+
+GreaterThanZeroRule()
+
+],
+
+...
+
+}
+
+BusinessRulesValidator should simply execute the configured rules.
+
+==================================================
+IMPROVEMENT 5
+Schema Driven DataType Validation
+==================================================
+
+Currently DataTypeValidator manually checks
+
+float
+
+str
+
+object
+
+Move datatype validation closer to the schema.
+
+Allow each schema field to define its own validation logic.
+
+The validator should ask the schema whether the dtype is valid.
+
+==================================================
+IMPROVEMENT 6
+Reporting Separation
+==================================================
+
+Currently validator.py builds the report.
+
+Move report generation into a dedicated component.
+
+Example:
+
+report_builder.py
+
+ValidationReportBuilder
+
+Validator.py should never know formatting.
+
+It should only return ValidationResult.
+
+==================================================
+IMPROVEMENT 7
+Statistics Engine
+==================================================
+
+Expand statistics.
+
+Current statistics:
+
+Rows
+
+Columns
+
+Missing %
+
+Add:
+
+Duplicate rows
+
+Memory usage
+
+Column dtypes
+
+Numeric columns count
+
+Categorical columns count
+
+Boolean columns count
+
+Average missing %
+
+Complete dataset completeness score
+
+==================================================
+IMPROVEMENT 8
+Validation Pipeline Metadata
+==================================================
+
+Each validator should expose metadata.
+
+Example
+
+ValidatorMetadata
+
+name
+
+description
+
+category
+
+severity
+
+execution_time
+
+This will later allow dashboard generation.
+
+==================================================
+IMPROVEMENT 9
+Performance
+==================================================
+
+Avoid scanning the dataframe multiple times whenever possible.
+
+Optimize validators without sacrificing readability.
+
+Suggest vectorized pandas operations.
+
+==================================================
+IMPROVEMENT 10
+Future Plugin Support
+==================================================
+
+Design the architecture so third-party validators can be added.
+
+Example
+
+NutritionValidator
+
+RestaurantValidator
+
+MedicalValidator
+
+FinanceValidator
+
+without modifying DataFrameValidator.
+
+==================================================
+IMPORTANT
+==================================================
+
+Do NOT redesign the framework.
+
+Do NOT change the public API.
+
+Do NOT rewrite everything.
+
+Only perform incremental production-quality refactoring.
+
+Explain every improvement before implementing it.
+
+Generate code one improvement at a time.
+
+Wait for approval before moving to the next improvement.
+
+Follow:
+
+SOLID
+
+Clean Architecture
+
+Composition over inheritance
+
+Dependency Injection
+
+Open Closed Principle
+
+Enterprise Python style
+
+PEP8
+
+Maximum readability
+
+Maximum extensibility
+
+Unit-test friendly design.

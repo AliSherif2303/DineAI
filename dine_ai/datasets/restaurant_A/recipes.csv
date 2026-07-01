@@ -1,0 +1,6 @@
+recipe_name,price,description,meal_type,cuisine_type,ingredients,diet_labels,calories_per_serving,protein_g_per_serving,rating,preparation_time_minutes
+Pasta Primavera,12.5,Fresh pasta with seasonal vegetables,Lunch,Italian,"pasta, tomatoes, zucchini, olive oil",vegan,350,12,4.5,20
+Grilled Salmon,18.0,Atlantic salmon fillet grilled with lemon,Dinner,Mediterranean,"salmon, lemon, garlic, olive oil",keto;gluten-free,450,35,4.8,25
+Caesar Salad,10.0,Classic Caesar with romaine and croutons,Lunch,American,"romaine, croutons, parmesan, caesar dressing",vegetarian,250,8,4.2,15
+Margherita Pizza,14.0,Traditional Neapolitan pizza with basil,Dinner,Italian,"dough, tomato sauce, mozzarella, basil",vegetarian,600,18,4.6,15
+Beef Burger,11.5,Angus beef patty with cheddar and pickles,Lunch,American,"beef patty, bun, cheddar, pickles",halal,550,28,4.4,20

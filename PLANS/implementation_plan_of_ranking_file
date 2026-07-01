@@ -1,0 +1,134 @@
+# DineAI Ranking & Multi-Objective Optimization Framework
+
+Implement a production-grade, SOLID-compliant, and highly explainable ranking engine in [ranking.py](file:///d:/data/AI_WAITER/dine_ai/retrieval/ranking.py). It operates entirely on already-filtered candidates (represented as `CandidateFilterResult` inside a `FilteringResult` from [filtering.py](file:///d:/data/AI_WAITER/dine_ai/retrieval/filtering.py)) and computes rankings based on customizable factors or multi-objective functions.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> The ranking engine operates under two distinct paradigms depending on configuration:
+> 1. **Factor-based Ranking**: Standard linear/weighted scoring of individual candidate metrics (e.g. Price, Rating, Semantics).
+> 2. **Multi-Objective Ranking**: Multi-attribute decision-making utilizing customizable and potentially conflicting business/user objectives (e.g. maximize protein, minimize price, maximize margin).
+> We will expose a clean public API that seamlessly routes the request to the correct strategy or optimizer.
+
+---
+
+## Open Questions
+
+> [!NOTE]
+> No major blocking open questions are identified, as the prompt specifies the architecture and class names explicitly. Any additional configurations (e.g., custom normalization or objective definitions) will be loadable from JSON/YAML or custom Python classes.
+
+---
+
+## Proposed Changes
+
+### Component: dine_ai.retrieval
+
+#### [MODIFY] [ranking.py](file:///d:/data/AI_WAITER/dine_ai/retrieval/ranking.py)
+
+We will rewrite `ranking.py` to contain the full production implementation of the following classes:
+
+```mermaid
+classDiagram
+    direction TB
+    class RankingEngine {
+        +RankingConfig config
+        +BaseRankingStrategy strategy
+        +BaseObjectiveOptimizer optimizer
+        +rank(FilteringResult) RankingResult
+        +generate_report(RankingResult) str
+    }
+    class BaseScorer {
+        <<abstract>>
+        +score_batch(candidates, config) List[float]
+    }
+    class BaseRankingStrategy {
+        <<abstract>>
+        +rank(candidates, config) List[RankedCandidate]
+    }
+    class BaseObjective {
+        <<abstract>>
+        +evaluate(candidate) float
+    }
+    class BaseObjectiveOptimizer {
+        <<abstract>>
+        +optimize(candidates, objectives) List[RankedCandidate]
+    }
+    
+    RankingEngine --> BaseRankingStrategy : uses
+    RankingEngine --> BaseObjectiveOptimizer : uses
+    BaseRankingStrategy --> BaseScorer : queries via registry
+    BaseObjectiveOptimizer --> BaseObjective : resolves via registry
+```
+
+##### 1. Domain Models & Configuration
+* **`RankingFactor`**: Dataclass representing a scoring factor (name, scorer_key, weight, enabled, priority, normalize, invert, config).
+* **`RankingConfig`**: Holds list of `RankingFactor`, list of `Objective` (for multi-objective ranking), optimizer key/instance, diversity penalty details, and output caps.
+* **`RankedCandidate`**: Composition wrapper containing the candidate, final score, full break-down explanation, original index, and objective-related score mappings.
+* **`RankingExplanation`**: Captures raw/normalized scores, factor/objective contributions, bonuses/penalties, conflict metrics, and generates a formatted debug string.
+* **`RankingStatistics`**: Records execution telemetry, averages, top scores, execution times, and factor/objective breakdowns.
+* **`RankingResult`**: Aggregates ranked candidates, telemetry statistics, and the enterprise report.
+
+##### 2. Scorer Plugins (Strategy & ISP)
+* **`BaseScorer`**: Abstract base class.
+* **`SemanticScore`**: Extracts semantic similarity from candidate metadata.
+* **`SoftRuleScore`**: Inherits soft rule score from filtering candidate results.
+* **`NutritionScore`**: Calculates proximity to target caloric or nutrient count.
+* **`RatingScore`, `PopularityScore`, `PriceScore`, `FreshnessScore`**: Extract respective attributes.
+* **`DiversityScore`**: Static diversity score based on category distribution.
+* **`MetadataScore`**: Calculates completion ratio of required fields.
+* **`PenaltyScore`**: Extracts and formats negative adjustments (e.g. delivery fee).
+* **`CustomScore`**: Wraps a callable for quick prototype scoring.
+* **`RankingRegistry`**: Thread-safe runtime registry for scoring plugins.
+
+##### 3. Normalization System
+* **`ScoreNormalizer`**: Support min-max, z-score, identity, and custom normalizers with optional score inversion.
+
+##### 4. Ranking Strategies
+* **`BaseRankingStrategy`**: Abstract class for ranking algorithms.
+* **`WeightedRankingStrategy`**: Computes weighted sum of active scorers. Supports sequential diversity penalties (MMR-lite).
+* **`LinearRankingStrategy`**: Equal weighting (1.0 weight) strategy.
+* **`HybridRankingStrategy`**: Weighted rank with an ML re-ranking pass stub.
+* **`MLRankingStrategy`**: Pure Learning-to-Rank integration architecture stub.
+* **`CustomRankingStrategy`**: Custom ranking strategy closure wrapper.
+
+##### 5. Multi-Objective Optimization
+* **`BaseObjective`**: Base class for all objective attributes.
+* **`Objective`**: Standard mapping class (name, weight, priority, maximize, minimize, enabled, normalizer, description).
+* **`NumericObjective`**: Objective targeting numeric attributes (e.g., protein, price, rating).
+* **`CategoricalObjective`**: Objective targeting discrete match rules.
+* **`BooleanObjective`**: Target boolean flags.
+* **`ComputedObjective`**: Dynamic computed values (e.g., `protein_per_dollar` or `calories_per_100g`).
+* **`ObjectiveRegistry`**: Global registry for registering custom business and computed objectives. Automatically discoverable.
+* **`ObjectiveResult`**: Captures optimization outputs.
+
+##### 6. Objective Optimizers
+* **`BaseObjectiveOptimizer`**: Abstract class decoupled from `RankingEngine`.
+* **`WeightedObjectiveOptimizer`**: Normalizes and weights independent objectives. Computes objective conflict resolution metrics (identifies when maximize/minimize criteria conflict and penalizes or reports balance).
+* **`ParetoOptimizer`, `TOPSISOptimizer`, `PROMETHEEOptimizer`, `ELECTREOptimizer`, `LearningToRankOptimizer`**: Subclass stubs with clear interface endpoints for future decision-making algorithms.
+* **`CustomObjectiveOptimizer`**: Custom optimizer callable registry.
+
+##### 7. Enterprise Reporting & IO
+* **`EnterpriseRankingReport`**: Format text output detailing optimization strategy, active objectives, weights, conflicting metrics, normalizers, average objective scores, and final distributions.
+* JSON/YAML config loading integration directly in `RankingConfig`.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+Run the standalone self-test suite directly:
+```bash
+python dine_ai/retrieval/ranking.py
+```
+
+We will build comprehensive self-tests inside the `run_self_tests()` function covering:
+* **Single and Weighted Ranking**: Verifying that ranking is correct and changing weights changes ordering.
+* **Score Normalization**: Validating min-max, z-score, identity, and custom methods.
+* **Plugin Registries**: Custom scorers and objectives runtime registration.
+* **Explanation Generation**: Formatting of raw scores, contributions, and penalties.
+* **Diversity Penalty**: MMR-lite testing for category diversity.
+* **Weighted Multi-Objective Optimization**: Combining protein, price, calories, and ratings, resolving conflict tradeoffs.
+* **Serialization & Configuration Loading**: Loading from dictionaries (mocking JSON/YAML inputs).
+* **Future Optimizer Registration**: Verifying stubs like TOPSIS or Pareto register properly.

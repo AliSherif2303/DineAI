@@ -1,0 +1,29 @@
+{
+    "statistics": {
+        "total_columns": 8,
+        "mapped_columns": 6,
+        "unmapped_columns": 2,
+        "mapping_coverage_pct": 75.0
+    },
+    "mapping": {
+        "dish_name": "recipe_name",
+        "calories": "calories_per_serving",
+        "protein": "protein_g_per_serving",
+        "carbs": "carbs_g_per_serving",
+        "fat": "fat_g_per_serving",
+        "price": "price"
+    },
+    "unmatched_columns": [
+        {
+            "column": "title",
+            "reason": "REJECTED - Duplicate of 'dish_name'"
+        },
+        {
+            "column": "unknown_column",
+            "reason": "UNKNOWN - No matching canonical alias"
+        }
+    ],
+    "warnings": [
+        "Duplicate mapping rejected: Column 'title' was rejected because canonical field 'recipe_name' is already mapped to by 'dish_name'."
+    ]
+}

@@ -1,0 +1,93 @@
+# Walkthrough - DineAI Prompt and Generator Frameworks
+
+We have successfully designed, implemented, and verified the complete **Prompt Engineering Framework** (in [prompts.py](file:///d:/data/AI_WAITER/dine_ai/llm/prompts.py)) and **LLM Generator Framework** (in [generator.py](file:///d:/data/AI_WAITER/dine_ai/llm/generator.py)) for the DineAI platform. Both modules conform strictly to SOLID design principles, Clean Architecture, and Strategy/Factory/Registry patterns.
+
+---
+
+## 1. DineAI Enterprise Prompt Engineering Framework
+
+Located in [prompts.py](file:///d:/data/AI_WAITER/dine_ai/llm/prompts.py), this framework manages the assembly, validation, optimization, localization, and token budget management of prompts before they are sent to the LLM.
+
+### Core Architecture & Strategy Patterns
+* **Strategic Components**: Direct subclasses of `BasePromptComponent` (System, Restaurant, Context, Language, Persona, Safety, Formatting, Recommendation, Conversation, FewShot) implement isolated section-building behaviors.
+* **Fluent PromptBuilder**: Implements fluent chaining APIs to construct prompts from templates:
+  ```python
+  config = PromptConfig()
+  builder = PromptBuilder(config)
+  builder.use_template("RestaurantChat").set_language("Arabic").set_persona("FriendlyWaiter").set_context(ctx)
+  result = builder.build()
+  ```
+* **Label Localization**: Translates context properties dynamically (e.g., translating "Recipe Name" to "اسم الوصفة" in Arabic) using translation maps, without modifying underlying metadata.
+* **Token Budget Management**: If token counts exceed budgets, the `TokenBudgetManager` applies memory sliding windows and `ContextCompressor` passes (Top-K item reduction, ingredients and micro-nutrition truncation) to guarantee LLM context compatibility.
+* **Validation checks**: The `PromptValidator` checks templates pre-optimization for duplicates, negative priorities, and missing system instructions.
+
+---
+
+## 2. DineAI LLM Generator Framework
+
+Located in [generator.py](file:///d:/data/AI_WAITER/dine_ai/llm/generator.py), this module interacts with Large Language Models, manages tokenizer/model lifecycles, VRAM, and output validation checks.
+
+### Core Architecture & Strategy Patterns
+* **Request/Response DTOs**: Forms strict interface boundaries via `GenerationRequest`, `GenerationResponse`, and `GenerationStatistics` carrying resource execution analytics (GPU/CPU memory, token footprints, latency measurements).
+* **Provider Registry**: Locator mapping key names to `BaseLLMProvider` subclasses, enabling dynamic runtime registrations (e.g. `ProviderRegistry.register("qwen", QwenProvider)`).
+* **Model Lifecycle Manager**: `ModelManager` isolates RAM/VRAM allocations from providers. It auto-detects CPU/CUDA execution, wraps float16 precision, configures BitsAndBytes quantization (4-bit/8-bit), and manages reuses/unloads.
+* **LRU Prompt Caching**: `GenerationCache` hashes prompt inputs and active parameters (SHA-256) and stores responses using an LRU eviction structure and TTL bounds.
+* **Response Validator**: `ResponseValidator` sanitizes outputs, alerting if empty responses, repetition loops, formatting limits, or system prompt leaks occur.
+* **Concrete & Placeholder Providers**:
+  * **HuggingFace & Qwen**: `HuggingFaceProvider` wraps tokenizer loading, CUDA setups, error handling, and threading for streaming outputs via `TextIteratorStreamer`. `QwenProvider` registers under `"qwen"` for direct transformer execution.
+  * **API Placeholders**: `OpenAIProvider`, `ClaudeProvider`, `GeminiProvider`, `LlamaProvider`, `MistralProvider`, and `OllamaProvider` raise `NotImplementedError` for future integrations.
+
+### Test Verification
+The standalone suite (run via `python -m dine_ai.llm.generator`) successfully verified:
+* **Config Validations**: Correctly rejects unsupported temperatures or provider names.
+* **Registry & Mock Operations**: Validated routing and streaming using `MockProvider`.
+* **Caching**: Hit/miss efficiency and TTL validations.
+* **Response Validator**: Correctly flagged simulated repetition loops and system prompt leaks.
+* **Memory & Lifecycle Manager**: Validated loading, reloading, caching, and VRAM clearing.
+
+---
+
+## Output Demonstration Reports
+
+### Enterprise Prompt Report
+```
+================================================================================
+         DineAI Prompt Framework - Enterprise Prompt Engineering Report         
+================================================================================
+ Characters Count   : 1584
+ Estimated Tokens   : 396 (Budget limit: 1000)
+ Prompt Hash        : e2e2baa0b8995500...
+--------------------------------------------------------------------------------
+ COMPILED ACTIVE SECTIONS IN ORDER:
+  1. SystemPrompt
+  2. PersonaPrompt
+  3. RestaurantPrompt
+  4. SafetyPrompt
+  5. LanguagePrompt
+  6. RecommendationPrompt
+  7. FormattingPrompt
+  8. FewShotPrompt
+  9. ContextPrompt
+  10. ConversationPrompt
+--------------------------------------------------------------------------------
+ VALIDATION STATUS: SUCCESS (0 anomalies detected)
+================================================================================
+```
+
+### Enterprise LLM Generation Report
+```
+================================================================================
+======== DineAI Generation Framework - Enterprise LLM Execution Report =========
+================================================================================
+ Provider / Model     : MOCK / Qwen/Qwen2.5-7B-Instruct
+ Execution Mode       : local
+ Run Device           : auto
+--------------------------------------------------------------------------------
+ Latency Summary      : Total: 3.14s, Load: 0.00s, Gen: 0.00s
+ Memory Tracing       : GPU VRAM Allocated: 0.00 MB, CPU RAM RSS: 166.03 MB
+ Token Statistics     : Input Prompt Tokens: 3, Output Tokens: 26
+ Cache Status         : Cache Hit: False | Cache Efficiency: Hits: 1, Misses: 3, Ratio: 25.00%
+--------------------------------------------------------------------------------
+ Execution Status     : SUCCESS
+================================================================================
+```

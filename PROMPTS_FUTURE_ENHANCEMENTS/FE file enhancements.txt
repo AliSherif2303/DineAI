@@ -1,0 +1,193 @@
+You are a Principal Software Architect specializing in enterprise Python frameworks, scalable ETL systems, and reusable feature engineering pipelines.
+
+The current implementation of feature_engineering.py is complete and production-ready.
+
+The architecture already includes:
+
+- BaseFeatureEngineer
+- NutritionFeatureEngineer
+- DietaryFeatureEngineer
+- MealFeatureEngineer
+- PriceFeatureEngineer
+- MetadataFeatureEngineer
+- FeatureEngineer (Pipeline Coordinator)
+- FeatureEngineeringResult
+- FeatureDefinition
+- EngineerMetadata
+
+The public API MUST remain unchanged.
+
+Example:
+
+engineer = FeatureEngineer()
+
+df = engineer.transform(df)
+
+engineer.generate_report()
+
+Do NOT redesign the architecture.
+
+Only improve maintainability, scalability, configurability, and extensibility.
+
+====================================================
+
+Improvement 1
+Configuration System
+
+====================================================
+
+Move every hardcoded threshold into a centralized configuration module.
+
+Examples:
+
+HIGH_PROTEIN_THRESHOLD
+
+LOW_CARB_THRESHOLD
+
+LOW_FAT_THRESHOLD
+
+LOW_SODIUM_THRESHOLD
+
+LOW_CALORIE_THRESHOLD
+
+PRICE_BUCKETS
+
+NUTRITION_SCORE_WEIGHTS
+
+Every engineer should consume configuration values rather than embedding constants.
+
+====================================================
+
+Improvement 2
+Feature Registry
+
+====================================================
+
+Create a FeatureRegistry class.
+
+It should automatically collect FeatureDefinition objects from every registered engineer.
+
+Support:
+
+list_features()
+
+search()
+
+export_json()
+
+export_markdown()
+
+Future automatic documentation should depend on this registry.
+
+====================================================
+
+Improvement 3
+Required Column Metadata
+
+====================================================
+
+Each FeatureEngineer should explicitly declare:
+
+required_columns
+
+optional_columns
+
+The pipeline should automatically determine whether an engineer can execute.
+
+Avoid repeated if column exists logic inside engineers.
+
+====================================================
+
+Improvement 4
+Feature Collision Detection
+
+====================================================
+
+Prevent two engineers from generating the same feature name.
+
+Raise a descriptive exception before overwriting an existing feature.
+
+====================================================
+
+Improvement 5
+FeatureWarning Dataclass
+
+====================================================
+
+Replace warning strings with a structured dataclass.
+
+Include:
+
+engineer
+
+feature
+
+severity
+
+message
+
+timestamp
+
+====================================================
+
+Improvement 6
+FeatureCategory Enum
+
+====================================================
+
+Replace string categories such as:
+
+nutrition
+
+dietary
+
+meal
+
+metadata
+
+price
+
+with a strongly typed Enum.
+
+====================================================
+
+Improvement 7
+Extended Statistics
+
+====================================================
+
+Expand execution statistics.
+
+Examples:
+
+Total Features
+
+Skipped Engineers
+
+Failed Engineers
+
+Execution Time
+
+Average Engineer Time
+
+New Columns Added
+
+====================================================
+
+General Requirements
+
+====================================================
+
+Preserve the existing public API.
+
+Maintain SOLID principles.
+
+Use composition over inheritance.
+
+Keep every engineer stateless.
+
+Keep the code production-ready.
+
+Explain each improvement before implementing it.
+
+Implement one improvement at a time.

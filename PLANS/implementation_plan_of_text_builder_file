@@ -1,0 +1,85 @@
+# DineAI Text Builder Module Architecture Plan
+
+This document outlines the architecture for the upcoming `text_builder.py` module in the DineAI framework.
+
+## Goals
+
+1. **Modular Section Builders**: Decouple textual construction of individual sections (Header, Description, Nutrition, Dietary, Ingredients, Metadata) into independent classes.
+2. **Caching & Reusability**: Share the same section builders across multiple target templates (Embedding, LLM, Summary) and cache intermediate outputs to avoid duplicate calculations.
+3. **Pluggable Templates**: Enable developers to configure and register new output columns and formatting templates without changing coordinator code.
+
+---
+
+## Core Classes & Architecture
+
+### 1. Telemetry & Definition Dataclasses
+- **`TextDefinition`**: Represents registry documentation for a generated column (fields: `name`, `description`, `template_name`, `sections_used`, `purpose`).
+- **`BuilderMetadata`**: Tracks execution duration and generation status for individual section builders.
+- **`TextWarning`**: Diagnostic warnings (fields: `builder_name`, `message`, `severity`, `timestamp`).
+- **`TextBuildingResult`**: Consolidated result accumulator passed through the pipeline.
+
+### 2. `BaseSectionBuilder` (Abstract Base Class)
+Contract representing a single section generator.
+- **Properties/Methods**:
+  - `build_section(self, df: pd.DataFrame) -> pd.Series`: Vectorized calculation returning a pandas string Series representing the built section for each row.
+  - `get_name(self) -> str`
+  - `get_description(self) -> str`
+
+### 3. Concrete Section Builders
+- **`HeaderSectionBuilder`**: Stitches `recipe_name`, `cuisine_type`, `meal_type`, and `dish_type`.
+- **`DescriptionSectionBuilder`**: Stitches `description`, `prep_notes`, and `servings`.
+- **`NutritionSectionBuilder`**: Formats calories, macronutrient weights, densities, and ratios.
+- **`DietarySectionBuilder`**: Formats dietary flags (vegan, vegetarian, gluten-free, keto, halal) and label tags.
+- **`IngredientsSectionBuilder`**: Formats the bulleted list of ingredients.
+- **`MetadataSectionBuilder`**: Formats price rating levels, preparation times, and popularity metrics.
+
+### 4. `TextTemplate` (Stitching Class)
+Defines how multiple section builders are ordered and joined.
+- **Fields**:
+  - `name: str` - Unique name (e.g. `'Embedding'`, `'LLM'`).
+  - `purpose: str` - E.g. `'semantic search'`, `'context window feeding'`.
+  - `target_column: str` - Name of the output column in the DataFrame (e.g. `'search_text'`, `'text_chunk'`).
+  - `sections: List[BaseSectionBuilder]` - Ordered list of section builders to execute.
+- **Methods**:
+  - `render(self, df: pd.DataFrame, section_cache: Dict[str, pd.Series]) -> pd.Series`: Resolves sections from cache, merges them with `\n\n` delimiters, and returns the unified Series.
+
+---
+
+## Execution Flow
+
+1. **Initialization**:
+   * The client instantiates `builder = TextBuilder(templates=[...])`.
+   * A set of default templates is registered:
+     * `EmbeddingTemplate`: `[HeaderSectionBuilder, NutritionSectionBuilder, DietarySectionBuilder, IngredientsSectionBuilder]` -> writes to `search_text`.
+     * `LLMTemplate`: `[HeaderSectionBuilder, DescriptionSectionBuilder, NutritionSectionBuilder, IngredientsSectionBuilder, MetadataSectionBuilder]` -> writes to `text_chunk`.
+     * `SummaryTemplate`: `[HeaderSectionBuilder, DescriptionSectionBuilder]` -> writes to `summary_text`.
+2. **Transform Pipeline** (`builder.transform(df)`):
+   * A fresh `TextBuildingResult` container is initialized.
+   * **Stitching and Caching Optimizer**:
+     * The coordinator gathers the set of all unique `BaseSectionBuilder` instances referenced by the active templates.
+     * It runs each unique section builder *once*, caching the returned Series in `section_cache: Dict[str, pd.Series]`. This guarantees $O(1)$ calculations per section, regardless of how many templates reference it.
+   * **Template Application**:
+     * The coordinator iterates over the registered templates, calling `template.render(df, section_cache)`.
+     * The output Series are assigned to the target column names on the DataFrame.
+   * Telemetry stats (durations, column counts) are computed and stored in `self.last_result`.
+   * Returns the enriched DataFrame.
+
+---
+
+## SOLID Compliance
+
+* **Single Responsibility (SRP)**: Each builder handles exactly one logical section formatting. `TextTemplate` only handles ordering/stitching.
+* **Open-Closed Principle (OCP)**: Third-party developers can register custom section builders (e.g., `ProductSectionBuilder`) and define new custom templates (e.g., `SearchCatalogTemplate`) without modifying existing class implementations.
+* **Interface Segregation**: Clients interact only with the clean public `TextBuilder` coordination interface.
+* **Dependency Injection (DIP)**: `TextBuilder` depends on the abstractions `BaseSectionBuilder` and `TextTemplate`, permitting runtime configurability and straightforward mock-testing.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+* Create unit tests verifying:
+  - Vectorized section builders generate correct formatting structures.
+  - Caching prevents duplicate section builder calls.
+  - Custom templates can be injected and execute successfully.
+  - Telemetry statistics and reports are produced correctly.

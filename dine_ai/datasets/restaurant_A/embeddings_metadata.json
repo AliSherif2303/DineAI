@@ -1,0 +1,33 @@
+{
+  "text_column": "search_text",
+  "shape": [
+    5,
+    384
+  ],
+  "dtype": "float32",
+  "index": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4"
+  ],
+  "warnings": [],
+  "is_success": true,
+  "statistics": {
+    "total_texts": 5,
+    "embedded_texts": 5,
+    "cache_hits": 0,
+    "cache_misses": 5,
+    "batches_processed": 1,
+    "total_time_seconds": 0.0694,
+    "model_load_time_seconds": 0.0,
+    "embedding_time_seconds": 0.0681,
+    "texts_per_second": 72.02,
+    "embedding_dim": 384,
+    "model_name": "mock-384-v1",
+    "device": "cpu",
+    "normalized": true,
+    "timestamp": "2026-07-01T05:19:26.324067"
+  }
+}

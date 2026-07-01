@@ -1,0 +1,36 @@
+{
+  "config": {
+    "index_type": "flat_ip",
+    "embedding_dim": 384,
+    "nlist": 100,
+    "nprobe": 10,
+    "hnsw_m": 32,
+    "hnsw_ef_construction": 200,
+    "metric": "l2",
+    "normalize_before_index": true
+  },
+  "row_index": [
+    "0",
+    "1",
+    "2",
+    "3",
+    "4"
+  ],
+  "statistics": {
+    "total_vectors": 5,
+    "indexed_vectors": 5,
+    "index_type": "FlatIP",
+    "metric": "l2",
+    "embedding_dim": 384,
+    "requires_training": false,
+    "training_vectors": 0,
+    "training_time_seconds": 0.0,
+    "indexing_time_seconds": 0.2007,
+    "total_time_seconds": 0.2007,
+    "index_size_bytes": 7680,
+    "is_trained": true,
+    "timestamp": "2026-07-01T05:19:26.393491"
+  },
+  "warnings": [],
+  "is_success": true
+}

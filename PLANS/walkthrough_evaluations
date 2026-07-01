@@ -1,0 +1,264 @@
+# Walkthrough - DineAI Prompt, Generator, Orchestrator, and Evaluation Frameworks
+
+We have successfully designed, implemented, and verified the complete **Prompt Engineering Framework** (in [prompts.py](file:///d:/data/AI_WAITER/dine_ai/llm/prompts.py)), the **LLM Generator Framework** (in [generator.py](file:///d:/data/AI_WAITER/dine_ai/llm/generator.py)), the **Main Application Orchestrator Framework** (in [app.py](file:///d:/data/AI_WAITER/dine_ai/app.py)), and the **Evaluation Layer Framework** (in [integration_test.py](file:///d:/data/AI_WAITER/dine_ai/evaluations/integration_test.py) and [end_to_end_test.py](file:///d:/data/AI_WAITER/dine_ai/evaluations/end_to_end_test.py)) for the DineAI platform. All modules conform strictly to SOLID design principles, Clean Architecture, and Strategy/Factory/Registry patterns.
+
+---
+
+## 1. DineAI Enterprise Prompt Engineering Framework
+
+Located in [prompts.py](file:///d:/data/AI_WAITER/dine_ai/llm/prompts.py), this framework manages the assembly, validation, optimization, localization, and token budget management of prompts before they are sent to the LLM.
+
+### Core Architecture & Strategy Patterns
+* **Strategic Components**: Direct subclasses of `BasePromptComponent` (System, Restaurant, Context, Language, Persona, Safety, Formatting, Recommendation, Conversation, FewShot) implement isolated section-building behaviors.
+* **Fluent PromptBuilder**: Implements fluent chaining APIs to construct prompts from templates:
+  ```python
+  config = PromptConfig()
+  builder = PromptBuilder(config)
+  builder.use_template("RestaurantChat").set_language("Arabic").set_persona("FriendlyWaiter").set_context(ctx)
+  result = builder.build()
+  ```
+* **Label Localization**: Translates context properties dynamically (e.g., translating "Recipe Name" to "اسم الوصفة" in Arabic) using translation maps, without modifying underlying metadata.
+* **Token Budget Management**: If token counts exceed budgets, the `TokenBudgetManager` applies memory sliding windows and `ContextCompressor` passes (Top-K item reduction, ingredients and micro-nutrition truncation) to guarantee LLM context compatibility.
+* **Validation checks**: The `PromptValidator` checks templates pre-optimization for duplicates, negative priorities, and missing system instructions.
+
+---
+
+## 2. DineAI LLM Generator Framework
+
+Located in [generator.py](file:///d:/data/AI_WAITER/dine_ai/llm/generator.py), this module interacts with Large Language Models, manages tokenizer/model lifecycles, VRAM, and output validation checks.
+
+### Core Architecture & Strategy Patterns
+* **Request/Response DTOs**: Forms strict interface boundaries via `GenerationRequest`, `GenerationResponse`, and `GenerationStatistics` carrying resource execution analytics (GPU/CPU memory, token footprints, latency measurements).
+* **Provider Registry**: Locator mapping key names to `BaseLLMProvider` subclasses, enabling dynamic runtime registrations (e.g. `ProviderRegistry.register("qwen", QwenProvider)`).
+* **Model Lifecycle Manager**: `ModelManager` isolates RAM/VRAM allocations from providers. It auto-detects CPU/CUDA execution, wraps float16 precision, configures BitsAndBytes quantization (4-bit/8-bit), and manages reuses/unloads.
+* **LRU Prompt Caching**: `GenerationCache` hashes prompt inputs and active parameters (SHA-256) and stores responses using an LRU eviction structure and TTL bounds.
+* **Response Validator**: `ResponseValidator` sanitizes outputs, alerting if empty responses, repetition loops, formatting limits, or system prompt leaks occur.
+* **Concrete & Placeholder Providers**:
+  * **HuggingFace & Qwen**: `HuggingFaceProvider` wraps tokenizer loading, CUDA setups, error handling, and threading for streaming outputs via `TextIteratorStreamer`. `QwenProvider` registers under `"qwen"` for direct transformer execution.
+  * **API Placeholders**: `OpenAIProvider`, `ClaudeProvider`, `GeminiProvider`, `LlamaProvider`, `MistralProvider`, and `OllamaProvider` raise `NotImplementedError` for future integrations.
+
+### Test Verification
+The standalone suite (run via `python -m dine_ai.llm.generator`) successfully verified config validation, provider registry mapping, streaming chunks, LRU caching efficiency, and response validators.
+
+---
+
+## 3. DineAI Application Orchestration Framework
+
+Located in [app.py](file:///d:/data/AI_WAITER/dine_ai/app.py), this module coordinates all other decoupled DineAI modules together using an extensible Pipeline execution model without containing any direct business logic.
+
+### Core Architecture & Strategy Patterns
+* **Composition-Based Facade**: `DineAIApplication` composes and binds the managers, configurations, states, and the pipeline orchestrator:
+  * **`RestaurantManager`**: Loads and switches restaurant configurations, pickled datasets, and vectors. Supports self-healing auto-indexing of recipes using `MockEmbeddingModel` if standard FAISS files are absent.
+  * **`ConversationManager`**: Tracks conversation log history context keyed by Session IDs.
+* **Open/Closed Pipeline Stages**: Custom operations inherit from `BasePipelineStage`. The default orchestrator registers:
+  1. `SemanticSearchStage` (semantic retrieval from FAISS)
+  2. `FilteringStage` (structured metadata hard and soft rule constraints)
+  3. `RankingStage` (reordering using configured weights)
+  4. `PromptBuilderStage` (fluent prompt template construction and localization)
+  5. `GeneratorStage` (prompt completion using the generator engine)
+* **Pipeline Trace & Safe Error Boundaries**: Each stage receives and returns `PipelineContext`. If a stage throws an exception, `PipelineManager` logs details, registers the error inside `PipelineTrace`, and appends warnings without crashing the application facade.
+* **Events System**: Broadcasts structured notifications during startup, shutdown, dataset reloading, restaurant switching, and query start/completion phases.
+
+### Verification Status
+The full orchestrator self-tests passed successfully, validating:
+* Configuration validation constraints and serialization.
+* Adding, reordering, replacing, and removing pipeline stages.
+* Dynamical restaurant context switching.
+* Successful query generation and conversation history log updates.
+* Analytical ASCII and JSON report format generation.
+
+---
+
+## 4. DineAI Evaluation Layer Framework
+
+The evaluation layer consists of **Integration Tests** and **End-to-End Tests** implemented inside `dine_ai/evaluations/` (also aliased under `dine_ai/evaluation/` namespace wrapper).
+
+### Core Architecture & Strategy Patterns
+* **Integration Tests (`integration_test.py`)**:
+  * **`IntegrationTestRunner`**: Statelessly runs a complete sequentially chained verification of all 11 DineAI pipeline modules using a synthetic local recipe dataframe.
+  * Asserts type conformance, output structures, dimensions, missing keys, and exception boundaries for each module.
+* **End-to-End Tests (`end_to_end_test.py`)**:
+  * **`InterceptStage`**: A pipeline stage strategy injected at the end of the pipeline that captures the `PipelineContext` dynamically.
+  * **`EndToEndTestRunner`**: Simulates real-user query actions (keto, low calorie, gluten free, etc.) against the `DineAIApplication` facade and verifies semantic retrieval, filter bounds checking, prompt text assembly, and response formatting.
+* **Evaluation Reports (`IntegrationReport` & `EndToEndReport`)**: Output metrics compile success rates, execution counts, warnings, fastest/slowest latency boundaries, and translate success rates to health descriptors (EXCELLENT, VERY GOOD, etc.).
+
+---
+
+## Output Demonstration Reports
+
+### Enterprise Prompt Report
+```
+================================================================================
+         DineAI Prompt Framework - Enterprise Prompt Engineering Report         
+================================================================================
+ Characters Count   : 1584
+ Estimated Tokens   : 396 (Budget limit: 1000)
+ Prompt Hash        : e2e2baa0b8995500...
+--------------------------------------------------------------------------------
+ COMPILED ACTIVE SECTIONS IN ORDER:
+  1. SystemPrompt
+  2. PersonaPrompt
+  3. RestaurantPrompt
+  4. SafetyPrompt
+  5. LanguagePrompt
+  6. RecommendationPrompt
+  7. FormattingPrompt
+  8. FewShotPrompt
+  9. ContextPrompt
+  10. ConversationPrompt
+--------------------------------------------------------------------------------
+ VALIDATION STATUS: SUCCESS (0 anomalies detected)
+================================================================================
+```
+
+### Enterprise LLM Generation Report
+```
+================================================================================
+======== DineAI Generation Framework - Enterprise LLM Execution Report =========
+================================================================================
+ Provider / Model     : MOCK / Qwen/Qwen2.5-7B-Instruct
+ Execution Mode       : local
+ Run Device           : auto
+--------------------------------------------------------------------------------
+ Latency Summary      : Total: 3.14s, Load: 0.00s, Gen: 0.00s
+ Memory Tracing       : GPU VRAM Allocated: 0.00 MB, CPU RAM RSS: 166.03 MB
+ Token Statistics     : Input Prompt Tokens: 3, Output Tokens: 26
+ Cache Status         : Cache Hit: False | Cache Efficiency: Hits: 1, Misses: 3, Ratio: 25.00%
+--------------------------------------------------------------------------------
+ Execution Status     : SUCCESS
+================================================================================
+```
+
+### Enterprise Application Report
+```
+================================================================================
+          DineAI Application Framework - Enterprise Operational Report          
+================================================================================
+ Restaurant Catalog  : RESTAURANT_B
+ Dataset Location    : dine_ai/datasets
+ Execution Language  : English
+ LLM Provider        : MOCK
+ Model Name          : Qwen/Qwen2.5-7B-Instruct
+ Run Mode            : local
+--------------------------------------------------------------------------------
+ Application Status  : HEALTHY
+ Loaded Recipes      : 2
+ FAISS Index Vectors : 2
+ Uptime Elapsed      : 1.85s
+--------------------------------------------------------------------------------
+ RUNTIME QUERY METRICS:
+  Total Chat Queries : 1
+  Success/Fail Ratio : 1 / 0
+  Average Query Time : 1.7923s
+  Average Search Time: 0.0004s
+  Average Rank Time  : 0.0003s
+  Average Gen Time   : 1.7911s
+================================================================================
+```
+
+### Enterprise Integration Test Report
+```
+================================================================================
+                         DINEAI INTEGRATION TEST REPORT                         
+================================================================================
+ Schema Mapper ................................ PASS     (0.0341s)
+ Validator .................................... PASS     (0.0468s)
+ Feature Engineering .......................... PASS     (0.0807s)
+ Text Builder ................................. PASS     (0.0431s)
+ Embedding Builder ............................ PASS     (0.0403s)
+ FAISS Builder ................................ PASS     (1.0409s)
+ Semantic Search .............................. PASS     (0.0213s)
+ Filtering .................................... PASS     (0.0001s)
+ Ranking ...................................... PASS     (0.0002s)
+ Prompt Builder ............................... PASS     (0.0006s)
+ Generator .................................... PASS     (7.5239s)
+   [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ Modules Passed            : 11
+ Modules Failed            : 0
+ Success Percentage        : 100.00%
+ Overall Integration Score : 100.0%
+ Health Rating             : EXCELLENT
+ Pipeline Runtime          : 8.8362s
+================================================================================
+```
+
+### Enterprise End-to-End Test Report
+```
+================================================================================
+                         DINEAI END-TO-END TEST REPORT                          
+================================================================================
+ Queries Tested             : 10
+ Queries Passed             : 10
+ Queries Failed             : 0
+ Success Rate               : 100.00%
+ Average Latency            : 0.2461s
+ Fastest Query              : 0.0554s
+ Slowest Query              : 1.9443s
+--------------------------------------------------------------------------------
+                            Individual Query Results                            
+--------------------------------------------------------------------------------
+ [PASS] High protein breakfast
+  * Latency: 1.9443s
+  * Retrieved Candidates: 3
+  * Top Ranked Candidate: Truffle Mushroom Risotto
+    [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ [PASS] Low calorie lunch
+  * Latency: 0.0560s
+  * Retrieved Candidates: 3
+  * Top Ranked Candidate: Truffle Mushroom Risotto
+    [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ [PASS] Cheap dinner
+  * Latency: 0.0554s
+  * Retrieved Candidates: 3
+  * Top Ranked Candidate: Truffle Mushroom Risotto
+    [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ [PASS] Italian pasta
+  * Latency: 0.0582s
+  * Retrieved Candidates: 3
+  * Top Ranked Candidate: Truffle Mushroom Risotto
+    [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ [PASS] Vegan breakfast
+  * Latency: 0.0579s
+  * Retrieved Candidates: 3
+  * Top Ranked Candidate: Truffle Mushroom Risotto
+    [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ [PASS] Halal chicken
+  * Latency: 0.0624s
+  * Retrieved Candidates: 3
+  * Top Ranked Candidate: Truffle Mushroom Risotto
+    [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ [PASS] Keto meal
+  * Latency: 0.0567s
+  * Retrieved Candidates: 3
+  * Top Ranked Candidate: Truffle Mushroom Risotto
+    [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ [PASS] Low sodium soup
+  * Latency: 0.0559s
+  * Retrieved Candidates: 3
+  * Top Ranked Candidate: Truffle Mushroom Risotto
+    [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ [PASS] High fiber snack
+  * Latency: 0.0563s
+  * Retrieved Candidates: 3
+  * Top Ranked Candidate: Truffle Mushroom Risotto
+    [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ [PASS] Gluten free dessert
+  * Latency: 0.0577s
+  * Retrieved Candidates: 3
+  * Top Ranked Candidate: Truffle Mushroom Risotto
+    [WARN] Validation Critical Warning: Potential system prompt leakage detected ('You are DineAI').
+--------------------------------------------------------------------------------
+ Overall End-to-End Score   : 100.0%
+ Overall Health Rating       : EXCELLENT
+================================================================================
+```

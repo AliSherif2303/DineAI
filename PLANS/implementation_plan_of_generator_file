@@ -1,0 +1,105 @@
+# DineAI Generator Framework Implementation Plan
+
+Implement a decoupled, enterprise-grade LLM generation framework in [generator.py](file:///d:/data/AI_WAITER/dine_ai/llm/generator.py). The framework will manage configurations, request/response DTOs, provider registry, model lifecycle and GPU/CPU memory bounds, caching, validation pipelines, and HuggingFace/Qwen connections. It conforms strictly to SOLID design principles, Clean Architecture, and Strategy/Factory patterns.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> The generator framework is divided into distinct structural layers:
+> 1. **Data Transfer Layer**: Config blocks (`LLMConfig`, `GenerationConfig`) and DTO payloads (`GenerationRequest`, `GenerationResponse`, `GenerationStatistics`).
+> 2. **Provider Registry**: Locator mapping key names to `BaseLLMProvider` instances.
+> 3. **Lifecycle Manager**: `ModelManager` isolates memory operations, automatic CPU/CUDA routing, and quantization flags (lazy loading, reuse, unload, reload).
+> 4. **Caching & Validation**: `GenerationCache` (LRU prompt hashing with TTL limits) and `ResponseValidator` (checks for leakage, repetitions, length constraints, or broken text).
+> 5. **HuggingFace & Qwen Implementations**: `HuggingFaceProvider` wraps tokenizer/device selection. `QwenProvider` integrates actual causal model generation, BitsAndBytes quantization (4-bit/8-bit), FP16, and streaming.
+> 6. **Placeholders**: Stubs for OpenAI, Claude, Gemini, Llama, Mistral, and Ollama that raise `NotImplementedError`.
+
+---
+
+## Proposed Changes
+
+### Component: dine_ai.llm
+
+#### [MODIFY] [generator.py](file:///d:/data/AI_WAITER/dine_ai/llm/generator.py)
+
+We will rewrite `generator.py` to contain the full production implementation of the following classes:
+
+```mermaid
+classDiagram
+    direction TB
+    class GeneratorEngine {
+        +LLMConfig config
+        +BaseLLMProvider provider
+        +GenerationCache cache
+        +ResponseValidator validator
+        +generate(GenerationRequest) GenerationResponse
+    }
+    class BaseLLMProvider {
+        <<abstract>>
+        +load_model()
+        +generate(prompt, config) str
+        +stream_generate(prompt, config) Iterator[str]
+        +unload_model()
+        +health_check() bool
+    }
+    class ModelManager {
+        +load_model(config) Tuple[Any, Any]
+        +unload_model(model_path)
+        +reload_model(config)
+        +clear_cuda_cache()
+    }
+    class GenerationCache {
+        +get(hash) GenerationResponse
+        +set(hash, response)
+        +get_stats() Dict
+    }
+    class ResponseValidator {
+        +validate(text, config) List[str]
+    }
+    
+    GeneratorEngine --> BaseLLMProvider : communicates via
+    GeneratorEngine --> GenerationCache : checks
+    GeneratorEngine --> ResponseValidator : sanitizes via
+    BaseLLMProvider --> ModelManager : delegates lifecycles to
+```
+
+##### Phase-by-Phase Implementation Steps:
+1. **Phase 1 & 2: Configs and DTOs**
+   * Implement `LLMConfig` and `GenerationConfig` with detailed parameter validations (temperatures, top_p, etc.).
+   * Implement `GenerationRequest`, `GenerationResponse`, and `GenerationStatistics` DTOs with serialization helper methods (`to_dict()`, `to_json()`).
+2. **Phase 3 & 4: Base and Mock Providers**
+   * Define abstract `BaseLLMProvider` interface.
+   * Implement `MockProvider` returning deterministic string mappings to test the orchestration pipeline without requiring downloads.
+3. **Phase 5 & 6: Provider Registry and ModelManager**
+   * Implement `ProviderRegistry` for dynamic provider lifecycle registrations.
+   * Implement `ModelManager` isolating CPU/CUDA hardware routing, device-map selection, memory releases, lazy loading, and model cache reuses.
+4. **Phase 7 & 8: Cache and Validation**
+   * Implement `GenerationCache` wrapping an LRU cache dict with TTL timeouts and prompt hash comparisons.
+   * Implement `ResponseValidator` checking for leaks, length alerts, whitespaces, or repetition loops.
+5. **Phase 9: GeneratorEngine Orchestrator**
+   * Implement `GeneratorEngine` coordinating request routing, cache lookups, provider generation, and output validations.
+6. **Phase 10 & 11: HuggingFace & Qwen Providers**
+   * Implement `HuggingFaceProvider` wrapping tokenizer loaders, device allocations, and performance statistics.
+   * Implement `QwenProvider` supporting causal Transformers loading, BitsAndBytes configurations (4-bit, 8-bit), FP16, and token/seed parameters.
+7. **Phase 12: Placeholders & Reports**
+   * Add stubs for `OpenAIProvider`, `ClaudeProvider`, `GeminiProvider`, `LlamaProvider`, `MistralProvider`, and `OllamaProvider`.
+   * Implement `EnterpriseGenerationReport` formatting ASCII telemetry summaries.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+Run the standalone self-test suite:
+```bash
+python dine_ai/llm/generator.py
+```
+
+Self-tests implemented in `run_self_tests()` will cover:
+* **Configuration validations** (ranges, provider exists checks).
+* **Registry operations**: Mock and custom class registration and retrieval.
+* **Cache behaviors**: Hit/miss checks and LRU eviction tracking.
+* **Orchestrator pipeline integration** using `MockProvider` (loading, generating, validating, and reporting).
+* **Quantization configurations validation**.
+* **Enterprise report rendering verification**.

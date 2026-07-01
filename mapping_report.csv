@@ -1,0 +1,14 @@
+Section,Source_Column,Target_Value,Reason_Status
+statistic,total_columns,8,N/A
+statistic,mapped_columns,6,N/A
+statistic,unmapped_columns,2,N/A
+statistic,mapping_coverage_pct,75.00,N/A
+mapping,dish_name,recipe_name,MAPPED
+mapping,calories,calories_per_serving,MAPPED
+mapping,protein,protein_g_per_serving,MAPPED
+mapping,carbs,carbs_g_per_serving,MAPPED
+mapping,fat,fat_g_per_serving,MAPPED
+mapping,price,price,MAPPED
+unmatched,title,N/A,REJECTED - Duplicate of 'dish_name'
+unmatched,unknown_column,N/A,UNKNOWN - No matching canonical alias
+warning,N/A,Duplicate mapping rejected: Column 'title' was rejected because canonical field 'recipe_name' is already mapped to by 'dish_name'.,N/A

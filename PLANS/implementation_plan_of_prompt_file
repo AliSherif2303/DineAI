@@ -1,0 +1,121 @@
+# DineAI Prompt Engineering Framework Implementation Plan
+
+Implement a decoupled, enterprise-grade prompt engineering framework in [prompts.py](file:///d:/data/AI_WAITER/dine_ai/llm/prompts.py). The framework will assemble, validate, optimize, localize, and manage the token budget of prompt components before they are sent to an LLM. It conforms strictly to SOLID, Clean Architecture, and patterns like Builder, Strategy, and Registry.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> The prompt framework functions as a pipeline:
+> 1. Components represent specific logical sections (System, Safety, Persona, Context, Memory).
+> 2. The `PromptBuilder` retrieves a template, applies user configuration (language, persona, context), and chains sections based on priority.
+> 3. The `PromptOptimizer` and `TokenBudgetManager` enforce strict length boundaries and apply context compression strategies (Top-K, Summarization, Metadata trimming) if the token limit is exceeded.
+> 4. The output is a `PromptResult` containing execution metadata, a unique prompt hash, statistics, and validation warnings.
+
+---
+
+## Proposed Changes
+
+### Component: dine_ai.llm
+
+#### [MODIFY] [prompts.py](file:///d:/data/AI_WAITER/dine_ai/llm/prompts.py)
+
+We will write `prompts.py` to contain the complete prompt orchestration framework including:
+
+```mermaid
+classDiagram
+    direction TB
+    class PromptBuilder {
+        +PromptConfig config
+        +PromptContext context
+        +PromptTemplate template
+        +use_template(name)
+        +set_language(lang)
+        +set_persona(persona)
+        +set_context(context)
+        +build() PromptResult
+        +generate_report(PromptResult) str
+    }
+    class BasePromptComponent {
+        <<abstract>>
+        +build(context) str
+        +validate(context) List[str]
+        +enabled() bool
+        +priority() int
+    }
+    class PromptValidator {
+        +validate(components) List[str]
+    }
+    class PromptOptimizer {
+        +optimize(components, context, budget) List[BasePromptComponent]
+    }
+    class TokenBudgetManager {
+        +enforce_budget(components, context, max_tokens) List[BasePromptComponent]
+    }
+    class ContextCompressor {
+        +compress(candidates, strategy) str
+    }
+    
+    PromptBuilder --> BasePromptComponent : builds
+    PromptBuilder --> PromptValidator : uses
+    PromptBuilder --> PromptOptimizer : uses
+    PromptOptimizer --> TokenBudgetManager : uses
+    TokenBudgetManager --> ContextCompressor : uses
+```
+
+##### 1. Core Structures
+* **`PromptConfig`**: Stores global parameters like token limits, fallback language, default persona, and optimization flags.
+* **`PromptContext`**: DTO passing query, ranked candidates, conversational history, previous recommendations, and target languages/personas.
+* **`PromptTemplate`**: A composed sequence of component instances ordered by priority. Pre-registers templates: `RestaurantChat`, `Recommendation`, `Nutrition`, `Chef`, `FastResponse`, and `Debug`.
+* **`PromptResult`**: Holds the final prompt string, active sections list, warning logs, character/token metrics, prompt hash, and applied optimization decisions.
+* **`PromptStatistics`**: Computes telemetry (characters, words, estimated token counts, shortest/longest sections, average section length).
+* **`EnterprisePromptReport`**: Outputs a formatted text report with component status, warnings, execution details, and budget allocations.
+* **`PromptSerializer`**: Exposes JSON/Dict import/export options (`to_dict`, `to_json`, `save`, `load`).
+
+##### 2. Base & Component Strategy
+* **`BasePromptComponent`**: Abstract strategy. Subclasses implement:
+  * `SystemPrompt`: Configures DineAI identity and constraints.
+  * `RestaurantPrompt`: Defines catalog boundary enforcement constraints.
+  * `SafetyPrompt`: System and injection safeguards.
+  * `LanguagePrompt`: Directs language adaptation. Supports English, Arabic, French, Spanish, German. Extended languages register dynamically.
+  * `PersonaPrompt`: Friendly Waiter, Luxury Host, Professional Chef, Nutrition Coach, Fast Food Cashier, Fine Dining Concierge.
+  * `RecommendationPrompt`: Dictates how recommendations are explained.
+  * `FewShotPrompt`: Formats dynamic conversational examples. Examples are registry-loaded.
+  * `ContextPrompt`: Formats candidate metadata. Leverages a localization mapping to translate labels dynamically (e.g. "Recipe Name" to "اسم الوصفة" in Arabic) without modifying metadata.
+  * `ConversationPrompt`: Employs conversational history and follow-ups.
+* **`PromptRegistry`**: Central registry for custom prompt components and templates. Supports out-of-the-box discovery and dynamic runtime registration.
+
+##### 3. Validation System
+* **`PromptValidator`**: Detects validation warnings like duplicate components, missing required items, invalid priorities, circular references, duplicate system/context components, and empty inputs.
+
+##### 4. Budget & Compression System
+* **`PromptOptimizer`**: Performs deduplication, removes empty components, re-orders sections, and triggers budget managers.
+* **`TokenBudgetManager`**: Performs priority-based trimming of few-shot examples, conversation history, descriptions, and metadata.
+* **`ContextCompressor`**: Implements extensible compression strategies:
+  * `Top-K`: Drops lowest-ranked candidates first.
+  * `Summary`: Drops descriptions and ingredients, keeping title and nutrition.
+  * `Metadata`: Discards secondary key-values.
+  * `Ingredient`: Drops details of ingredient lists.
+  * `Nutrition`: Excludes micro-nutrient lists.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+Run the standalone self-test suite:
+```bash
+python dine_ai/llm/prompts.py
+```
+
+Comprehensive test hooks inside `run_self_tests()` will cover:
+* **Basic prompt composition and builder flow**.
+* **Registries**: Component and template registrations.
+* **Localization**: Verifying labels dynamically adapt based on language input.
+* **Language & Persona switching**.
+* **Few Shot & Memory prompts integration**.
+* **Validation checks**: Throwing warnings on duplicate/missing components.
+* **Token Budget Management**: Verifying components are pruned correctly when budget is reduced.
+* **Context Compression strategies**: Trimming descriptions/ingredients/metadata when limits are breached.
+* **Serialization & Report formatting**.

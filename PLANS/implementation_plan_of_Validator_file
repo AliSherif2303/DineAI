@@ -1,0 +1,107 @@
+# DineAI Dataset Validator Architecture Plan
+
+This document outlines the architecture for the upcoming `validator.py` module in the DineAI framework.
+
+## Goals
+
+1. **Stateless Data Integrity**: Validate standardize datasets produced by `SchemaMapper` without modifying the dataset or mutating framework state.
+2. **SOLID & Clean Architecture**: Every validator is a single-responsibility subclass of an abstract base class, coordinated by a central pipeline.
+3. **ETL Enterprise Quality Reporting**: Create rich validation results with detailed errors, warnings, stats, and a clean command-line visual overview.
+
+---
+
+## Proposed Classes
+
+### 1. `ValidationResult` (Dataclass)
+A simple, mutable container that collects data across all pipeline validators.
+
+- **Responsibilities**:
+  - Store the overall `is_valid` flag.
+  - Collect detailed `errors` (blocking issues) and `warnings` (non-blocking issues).
+  - Collect `statistics` (e.g., null percentage per column, total row count, missing rates).
+  - Record the execution status of individual validators (e.g. `RequiredColumnsValidator: PASS`).
+- **Structure**:
+  ```python
+  @dataclass
+  class ValidationResult:
+      is_valid: bool = True
+      errors: List[str] = field(default_factory=list)
+      warnings: List[str] = field(default_factory=list)
+      statistics: Dict[str, Any] = field(default_factory=dict)
+      validator_results: Dict[str, str] = field(default_factory=dict) # Maps validator name to "PASS", "WARNING", or "FAILED"
+  ```
+
+### 2. `BaseValidator` (Abstract Base Class)
+Defines the interface for all pluggable validators.
+
+- **Responsibilities**:
+  - Expose a single common execution method: `validate(self, df: pd.DataFrame, result: ValidationResult) -> None`.
+  - Perform validation on the DataFrame, appending any errors/warnings to `result` and updating its `validator_results` status.
+
+### 3. Pluggable Concrete Validators
+Each class implements a single check against the DataFrame:
+
+1. **`RequiredColumnsValidator`**:
+   - Compares the DataFrame's columns against the required fields in `CANONICAL_SCHEMA` (e.g., `recipe_name`).
+   - If missing, adds an error and sets status to `FAILED`.
+2. **`DuplicateColumnsValidator`**:
+   - Detects duplicate columns in the DataFrame (e.g., duplicate column names or post-mapped columns).
+   - If duplicate names exist, adds an error and sets status to `FAILED`.
+3. **`EmptyDatasetValidator`**:
+   - Verifies if the dataset contains zero rows (`len(df) == 0` or `df.empty`).
+   - If empty, adds an error and sets status to `FAILED`.
+4. **`MissingValuesValidator`**:
+   - Calculates the null/NaN rate per column.
+   - Populates `result.statistics` with the percentage of missing values per column.
+   - Triggers warnings if a column's missing values exceed a configurable threshold (e.g., `50%`), setting status to `WARNING`.
+5. **`DataTypeValidator`**:
+   - Compares DataFrame column datatypes against the expected Python types in `CANONICAL_SCHEMA`.
+   - Records warnings or errors if type mismatch is detected.
+6. **`BusinessRulesValidator`**:
+   - Enforces specific domain rules (e.g. calories cannot be negative, protein cannot be negative, serves must be $>0$, price cannot be negative).
+   - Adds errors if any rules are violated.
+
+### 4. `DataFrameValidator` (Main Coordinator)
+The sole public class exposed by the module.
+
+- **Responsibilities**:
+  - Accept a custom list of `BaseValidator` instances (dependency injection). If none are provided, it default-configures the standard six validators.
+  - Run the validation chain statelessly.
+  - Generate enterprise ETL reports and support console output.
+
+---
+
+## Execution Flow
+
+```mermaid
+graph TD
+    df[pandas.DataFrame] --> coordinator[DataFrameValidator]
+    result[New ValidationResult] --> coordinator
+    coordinator --> V1[RequiredColumnsValidator]
+    V1 -- Updates result --> V2[DuplicateColumnsValidator]
+    V2 -- Updates result --> V3[EmptyDatasetValidator]
+    V3 -- Updates result --> V4[MissingValuesValidator]
+    V4 -- Updates result --> V5[DataTypeValidator]
+    V5 -- Updates result --> V6[BusinessRulesValidator]
+    V6 --> Out[Return ValidationResult]
+```
+
+1. The client invokes `validator.validate(df)`.
+2. A fresh `ValidationResult` object is instantiated.
+3. The coordinator loops through each configured validator, passing `df` and the `ValidationResult` object.
+4. Each validator appends its telemetry. If any validator appends an error to `result.errors`, the overall `result.is_valid` is set to `False`.
+5. The populated `ValidationResult` is returned to the caller.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+* Create unit tests verifying each validator independently against mock DataFrames:
+  - Test `RequiredColumnsValidator` with missing keys.
+  - Test `BusinessRulesValidator` with negative servings and prices.
+  - Test `MissingValuesValidator` statistics compilation.
+  - Test standard `DataFrameValidator` execution.
+
+### Manual Verification
+* Run the validation script on the sample dataset in `restaurant_A` and print reports.

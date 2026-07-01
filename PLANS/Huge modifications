@@ -1,0 +1,455 @@
+# DineAI — Menu Intelligence Framework Evolution
+
+## Goal
+
+Evolve DineAI from a "Recipe Framework" into a complete **Restaurant Menu
+Intelligence Framework**.  The system must become fully data-driven:
+a restaurant uploads its CSV, and the framework automatically detects
+capabilities, configures all pipeline stages, and becomes production-ready
+— without any code modifications.
+
+---
+
+## Open Questions
+
+> [!IMPORTANT]
+> **Q1 — `app.py` modification scope**
+> The dynamic ranking (requirement 4) and dynamic filtering (requirement 5)
+> are most cleanly solved by making the underlying `ranking.py` and
+> `filtering.py` modules self-detecting.  This avoids touching `app.py`.
+> The `RankingStage` in `app.py` hardcodes Rating+Price+Semantic — but if
+> `WeightedRankingStrategy` internally filters unavailable factors and
+> redistributes weights, the stage works without modification.
+> **Confirmed approach: do NOT modify app.py.**
+
+> [!NOTE]
+> **Q2 — Canonical column name**
+> The internal canonical name will remain `recipe_name` to avoid breaking
+> the existing adapter chain, but the `AliasRegistry` will be expanded so
+> that `menu_item_name`, `menu_item`, `item`, `product_name` all resolve to it.
+> Externally the framework refers to this concept as "Menu Item".
+
+---
+
+## Proposed Changes
+
+---
+
+### New Package: `dine_ai/capabilities/`
+
+#### [NEW] [base.py](file:///d:/data/AI_WAITER/dine_ai/capabilities/base.py)
+
+Core abstractions.
+
+```
+ColumnRequirement (Enum)  — MANDATORY | RECOMMENDED | OPTIONAL
+CapabilityStatus  (Enum)  — ENABLED | DISABLED | PARTIAL
+CapabilityResult  (DC)    — name, status, reason, available_columns, missing_required, missing_optional
+BaseCapability    (ABC)   — name, required_columns, optional_columns, required_values, description, detect(df)
+```
+
+`BaseCapability.detect(df)` checks:
+1. All `required_columns` are present → ENABLED
+2. Some `required_columns` missing → DISABLED + reason
+3. `required_values` (e.g. `item_type IN [drink, coffee]`) validated → PARTIAL if values absent
+
+#### [NEW] [registry.py](file:///d:/data/AI_WAITER/dine_ai/capabilities/registry.py)
+
+```
+CapabilityRegistry
+  register(capability: BaseCapability)
+  register_many(capabilities: List[BaseCapability])
+  get_all() -> List[BaseCapability]
+  detect_all(df) -> List[CapabilityResult]
+  get_enabled(df) -> List[CapabilityResult]
+  get_disabled(df) -> List[CapabilityResult]
+
+DEFAULT_REGISTRY: CapabilityRegistry  — singleton with all built-in capabilities pre-registered
+```
+
+#### [NEW] [definitions.py](file:///d:/data/AI_WAITER/dine_ai/capabilities/definitions.py)
+
+All built-in `BaseCapability` subclasses:
+
+| Capability | Required Columns | Required Values |
+|---|---|---|
+| `NutritionCapability` | `calories_per_serving` OR `protein_g_per_serving` | — |
+| `BudgetCapability` | `price` | — |
+| `DietaryCapability` | `diet_labels` | — |
+| `RatingCapability` | `rating` | — |
+| `PopularityCapability` | `popularity` | — |
+| `IngredientsCapability` | `ingredients` | — |
+| `MealTypeCapability` | `meal_type` | — |
+| `CuisineCapability` | `cuisine_type` | — |
+| `DrinkCapability` | `item_type` | `drink`, `coffee`, `smoothie`, `juice` |
+| `DessertCapability` | `item_type` | `dessert` |
+| `AppetizerCapability` | `item_type` | `appetizer` |
+| `SoupCapability` | `item_type` | `soup` |
+| `SaladCapability` | `item_type` | `salad` |
+| `PrepTimeCapability` | `preparation_time_minutes` | — |
+| `AvailabilityCapability` | `availability` | — |
+| `AllergenCapability` | `cautions` | — |
+| `HighProteinCapability` | `protein_g_per_serving` | — |
+| `LowCalorieCapability` | `calories_per_serving` | — |
+| `KetoCapability` | `diet_labels` | `keto` |
+| `VeganCapability` | `health_labels` OR `diet_labels` | `vegan` |
+
+#### [NEW] [detector.py](file:///d:/data/AI_WAITER/dine_ai/capabilities/detector.py)
+
+```
+RestaurantCapabilityReport (DC)
+  restaurant_name: str
+  detected_item_types: List[str]
+  enabled_capabilities: List[CapabilityResult]
+  disabled_capabilities: List[CapabilityResult]
+  capability_score: float              — enabled / total  * 100
+  available_columns: List[str]
+  missing_recommended_columns: List[str]
+  missing_mandatory_columns: List[str]
+  warnings: List[str]
+  build_timestamp: str
+
+  to_dict() -> Dict
+  from_dict(d) -> RestaurantCapabilityReport
+  print_report() -> None               — enterprise ASCII report
+
+CapabilityDetector
+  __init__(registry: CapabilityRegistry = DEFAULT_REGISTRY)
+  detect(df, restaurant_name) -> RestaurantCapabilityReport
+```
+
+The `print_report()` output matches the specification:
+```
+====================================================
+ Restaurant Capability Report
+====================================================
+ Detected Menu Items
+  [OK] Main Course
+  [OK] Drinks
+  [--] Soups
+----------------------------------------------------
+ Available Recommendation Features
+  [OK] Nutrition
+  [OK] Price
+  [--] Ratings
+----------------------------------------------------
+ Overall Capability Score     91%
+====================================================
+```
+
+#### [NEW] [__init__.py](file:///d:/data/AI_WAITER/dine_ai/capabilities/__init__.py)
+
+Public surface re-exports.
+
+---
+
+### Modified: `dine_ai/adapters/schema_mapper.py`
+
+#### [MODIFY] [schema_mapper.py](file:///d:/data/AI_WAITER/dine_ai/adapters/schema_mapper.py)
+
+1. Expand `recipe_name` aliases in `AliasRegistry` to include:
+   `menu_item_name`, `menu_item`, `item`, `product_name`, `food_name`,
+   `menu_item_id` (for numeric name fallback).
+
+2. Add `item_type` to `CANONICAL_SCHEMA` as an Optional column:
+   ```python
+   "item_type": {"required": False, "dtype": str, "description": "Menu item category"}
+   ```
+
+3. Add `item_type` aliases:
+   `item_type`, `dish_category`, `category_type`, `type`, `item_category`.
+
+---
+
+### Modified: `dine_ai/adapters/feature_engineering.py`
+
+#### [MODIFY] [feature_engineering.py](file:///d:/data/AI_WAITER/dine_ai/adapters/feature_engineering.py)
+
+Add `ItemTypeEngineer` — a new `BaseFeatureEngineer` that runs **only when
+`item_type` is absent from the DataFrame**.
+
+Classification logic (keyword-based, in priority order):
+
+| Keywords in lowercase `recipe_name` | `item_type` |
+|---|---|
+| coffee, latte, cappuccino, espresso, americano, macchiato | `coffee` |
+| smoothie | `smoothie` |
+| juice, lemonade | `juice` |
+| coke, pepsi, water, soda, tea, iced tea, energy drink, beer, wine | `drink` |
+| cake, chocolate, ice cream, gelato, cookie, brownie, pudding, cheesecake, tart, muffin | `dessert` |
+| soup, broth, bisque, chowder | `soup` |
+| salad | `salad` |
+| spring roll, bruschetta, nachos, mozzarella sticks, wings, sampler, starter | `appetizer` |
+| sauce, dip, dressing, gravy, salsa | `sauce` |
+| side, fries, rice, coleslaw, bread | `side` |
+| combo, deal, set, bundle, platter | `combo` |
+| *(fallback)* | `main_course` |
+
+`ItemTypeEngineer` is inserted into the `FeatureEngineer` composition chain.
+
+---
+
+### Modified: `dine_ai/adapters/validator.py`
+
+#### [MODIFY] [validator.py](file:///d:/data/AI_WAITER/dine_ai/adapters/validator.py)
+
+Introduce a **3-tier schema classification** (does not change existing
+`CANONICAL_SCHEMA` structure — adds a parallel classification dict):
+
+```python
+MANDATORY_COLUMNS   = {"recipe_name"}           # Validation ERROR if missing
+RECOMMENDED_COLUMNS = {"price", "meal_type", "description", "ingredients"}
+                                                 # Capability DISABLED if missing
+OPTIONAL_COLUMNS    = {                          # Warning only
+    "rating", "popularity", "diet_labels", "health_labels",
+    "protein_g_per_serving", "calories_per_serving",
+    "cuisine_type", "preparation_time_minutes",
+    "image_url", "availability", "item_type",
+}
+```
+
+Update `RequiredColumnsValidator` to enforce **only** `MANDATORY_COLUMNS`.
+Add `RecommendedColumnsValidator` that emits **WARNINGS** (not errors) for
+missing recommended columns with a message:
+`"Price information is unavailable — Budget Filtering disabled."`
+
+---
+
+### Modified: `dine_ai/adapters/text_builder.py`
+
+#### [MODIFY] [text_builder.py](file:///d:/data/AI_WAITER/dine_ai/adapters/text_builder.py)
+
+All `BaseTextBuilder` implementations (especially `SearchTextBuilder`,
+`TextChunkBuilder`, `SummaryTextBuilder`) already use the `is_present()`
+helper — so dynamic generation is mostly in place.
+
+Changes:
+1. Add `item_type` to the `SearchTextBuilder` field list so that
+   `search_text` includes the item category for better retrieval.
+2. Add `item_type` and `menu_item_name` awareness to `SummaryTextBuilder`
+   so summaries say "Menu Item" instead of "Recipe".
+3. Update any string literals from "Recipe" → "Menu Item".
+
+---
+
+### Modified: `dine_ai/retrieval/ranking.py`
+
+#### [MODIFY] [ranking.py](file:///d:/data/AI_WAITER/dine_ai/retrieval/ranking.py)
+
+Implement **dynamic weight redistribution** in `WeightedRankingStrategy.rank()`:
+
+1. Add `required_column: Optional[str] = None` field to `RankingFactor`.
+2. After collecting `active_factors`, filter against actual candidate metadata:
+   ```python
+   def _filter_available_factors(factors, candidates):
+       if not candidates:
+           return factors
+       sample_meta = _get_metadata(candidates[0])
+       available = [f for f in factors
+                    if f.required_column is None or f.required_column in sample_meta]
+       removed = set(f.name for f in factors) - set(f.name for f in available)
+       if removed:
+           logger.info("Removed unavailable ranking factors: %s", removed)
+       return available
+   ```
+3. After filtering, redistribute weights proportionally:
+   ```python
+   def _redistribute_weights(factors):
+       total = sum(f.weight for f in factors)
+       if total == 0:
+           return factors
+       return [replace(f, weight=f.weight / total) for f in factors]
+   ```
+4. Update `RankingFactor` pre-registrations to include `required_column`:
+   - `RatingScore` → `required_column="rating"`
+   - `PriceScore` → `required_column="price"`
+   - `NutritionScore` → `required_column="calories_per_serving"`
+   - `PopularityScore` → `required_column="popularity"`
+   - `SemanticScore` → `required_column=None` (always available)
+
+5. Add `redistributed_factors: List[str]` to `RankingStatistics` and
+   `removed_factors: List[str]` for observability.
+
+> [!NOTE]
+> This means `app.py`'s hardcoded `RankingConfig(factors=[Rating, Price, Semantic])`
+> automatically adapts at runtime — if a restaurant has no `rating` column,
+> the weight is redistributed to the remaining two factors.  Zero code change to `app.py`.
+
+---
+
+### Modified: `dine_ai/retrieval/filtering.py`
+
+#### [MODIFY] [filtering.py](file:///d:/data/AI_WAITER/dine_ai/retrieval/filtering.py)
+
+Add **capability-aware skip logic** in `FilteringEngine.filter()`:
+
+For each `FilterRule`, before evaluation:
+```python
+if rule.required_column and rule.required_column not in available_columns:
+    result.warnings.append(
+        f"Filter '{rule.name}' skipped: column '{rule.required_column}' "
+        f"is unavailable for this restaurant."
+    )
+    continue
+```
+
+Add `required_column: Optional[str] = None` to `FilterRule` dataclass.
+Filtering continues with remaining valid rules — never crashes on missing data.
+
+---
+
+### Modified: `dine_ai/llm/prompts.py`
+
+#### [MODIFY] [prompts.py](file:///d:/data/AI_WAITER/dine_ai/llm/prompts.py)
+
+1. Update `LOCALIZATION_DATA` to use `menu_item_name` / `menu_item` keys
+   (keeping `recipe_name` as a backward-compat alias).
+2. Add `available_columns: List[str] = field(default_factory=list)` to `PromptContext`.
+3. In all `BasePromptBuilder` implementations that build item sections, wrap
+   any field reference in an `is_field_available(col, context)` guard:
+   ```python
+   def is_field_available(col: str, context: PromptContext) -> bool:
+       if not context.available_columns:
+           return True   # unknown → include (backward compat)
+       return col in context.available_columns
+   ```
+   - Do not include `"Highly rated"` / `"Rating: N/A"` if `rating` is absent.
+   - Do not include prep time if `preparation_time_minutes` is absent.
+   - Do not include calories if `calories_per_serving` is absent.
+4. Update `SYSTEM_PROMPT_TEMPLATES` to instruct the LLM never to invent
+   information not present in the provided context.
+
+---
+
+### Modified: `dine_ai/llm/generator.py`
+
+#### [MODIFY] [generator.py](file:///d:/data/AI_WAITER/dine_ai/llm/generator.py)
+
+Add a `no_hallucination_directive` to the system prompt injection:
+```
+IMPORTANT: Only mention information explicitly present in the context provided.
+Do NOT mention ratings, popularity, reviews, or preparation times
+if that information is not included in the menu item context.
+```
+
+This is injected as a suffix to the system prompt when `available_columns`
+is present in the `PromptContext`.
+
+---
+
+### Modified: `dine_ai/dataset/metadata.py`
+
+#### [MODIFY] [metadata.py](file:///d:/data/AI_WAITER/dine_ai/dataset/metadata.py)
+
+Add two new fields to `DatasetMetadata`:
+
+```python
+capability_report: Dict[str, Any] = field(default_factory=dict)
+available_columns: List[str] = field(default_factory=list)
+```
+
+Both fields are serialised in `to_dict()` / `from_dict()` and persisted
+in `metadata.json`.  `capability_report` is the `RestaurantCapabilityReport.to_dict()`
+result.  `available_columns` is the list of normalized column names in the
+enriched DataFrame.
+
+---
+
+### Modified: `dine_ai/dataset/pipeline.py`
+
+#### [MODIFY] [pipeline.py](file:///d:/data/AI_WAITER/dine_ai/dataset/pipeline.py)
+
+Add **Step 6b** (between TextBuilder and Embedding):
+
+```
+Step 6: TextBuilder.transform(df)
+Step 6b: CapabilityDetector.detect(df) → RestaurantCapabilityReport
+         → print_report()
+         → stored in PipelineArtifacts.capability_report
+Step 7: EmbeddingProvider.build_embeddings(df)
+```
+
+`DatasetPipeline.__init__` accepts an optional `capability_detector: CapabilityDetector`.
+`DatasetPipeline._build_metadata()` populates `capability_report` and `available_columns`.
+`DatasetPipeline._print_build_report()` prints the capability report at the end.
+
+---
+
+### Modified: `dine_ai/dataset/manager.py`
+
+#### [MODIFY] [manager.py](file:///d:/data/AI_WAITER/dine_ai/dataset/manager.py)
+
+Update `_find_csv()` helper to search in priority order:
+1. `menu_items.csv` (preferred production filename)
+2. `recipes.csv` (backward-compatible)
+3. Any `*.csv` file found in the directory (auto-detect fallback)
+
+Replace the hardcoded `_CSV_FILENAME = "recipes.csv"` constant with this
+dynamic resolution.  All callers of `load_restaurant()` are updated.
+
+---
+
+### Modified: `dine_ai/dataset/loader.py`
+
+#### [MODIFY] [loader.py](file:///d:/data/AI_WAITER/dine_ai/dataset/loader.py)
+
+Update `RestaurantDataset` to expose capabilities:
+
+```python
+@property
+def capabilities(self) -> Dict[str, Any]:
+    return self.metadata.capability_report
+
+@property
+def available_columns(self) -> List[str]:
+    return self.metadata.available_columns
+```
+
+Update `__repr__` to show capability score.
+
+---
+
+### Modified: `dine_ai/dataset/__init__.py`
+
+#### [MODIFY] [__init__.py](file:///d:/data/AI_WAITER/dine_ai/dataset/__init__.py)
+
+Add `CapabilityDetector` to imports and exports.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+
+```bash
+python -m dine_ai.capabilities.detector      # Capability detection self-tests
+python -m dine_ai.dataset.manager            # All 14 scenarios (+ menu_items.csv scenario)
+python -m dine_ai.adapters.feature_engineering   # item_type classification tests
+```
+
+### Manual Verification
+
+1. Build dataset with `menu_items.csv` (not `recipes.csv`) → confirm auto-detection works
+2. Build dataset missing `rating` and `price` → confirm ranking adapts (3 factors → 1 with 100% weight)
+3. Build dataset with only `menu_item_name` → confirm all optional capabilities disabled but no crash
+4. Check `metadata.json` contains `capability_report` and `available_columns`
+5. Verify `RestaurantCapabilityReport` prints correctly during build
+
+---
+
+## Execution Order
+
+1. `capabilities/base.py` → `capabilities/definitions.py` → `capabilities/registry.py` → `capabilities/detector.py` → `capabilities/__init__.py`
+2. `schema_mapper.py` — add `menu_item_name` aliases + `item_type` column
+3. `feature_engineering.py` — add `ItemTypeEngineer`
+4. `validator.py` — 3-tier schema (Mandatory/Recommended/Optional)
+5. `ranking.py` — dynamic weight redistribution
+6. `filtering.py` — `required_column` skip logic
+7. `text_builder.py` — `item_type` in search text, "Menu Item" language
+8. `prompts.py` — `available_columns` guard + no-hallucination system prompt
+9. `generator.py` — no-hallucination directive
+10. `dataset/metadata.py` — `capability_report` + `available_columns` fields
+11. `dataset/pipeline.py` — Step 6b (CapabilityDetector)
+12. `dataset/manager.py` — multi-filename CSV detection
+13. `dataset/loader.py` — `capabilities` and `available_columns` properties
+14. `dataset/__init__.py` — update exports

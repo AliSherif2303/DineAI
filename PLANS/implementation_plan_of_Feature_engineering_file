@@ -1,0 +1,105 @@
+# DineAI Feature Engineering Module Architecture Plan
+
+This document outlines the architecture for the upcoming `feature_engineering.py` module in the DineAI framework.
+
+## Goals
+
+1. **Stateless Vectorized Transforms**: Apply features to standard input DataFrames using vectorized pandas routines. No row-by-row looping.
+2. **Pluggable and Open-Closed**: Provide a base abstract engineer definition allowing third-party libraries/domains (e.g. hospitality, movies) to add features.
+3. **Data Registries & Documentation**: Track every generated feature's metadata, dependencies, types, and descriptions for automatic documentation.
+
+---
+
+## Core Classes & Architecture
+
+### 1. `FeatureDefinition` (Dataclass)
+Stores the documentation/registry for a single engineered feature.
+
+- **Fields**:
+  - `feature_name: str` - Standardized name of the column created.
+  - `description: str` - User-friendly documentation explanation.
+  - `dependencies: List[str]` - Source columns required to compute this feature.
+  - `dtype: Any` - Expected pandas dtype or Python type.
+  - `created_by: str` - Name of the originating validator/engineer class.
+  - `category: str` - Grouping (e.g., `'nutrition'`, `'price'`).
+
+### 2. `EngineerMetadata` (Dataclass)
+Records individual validator pipeline telemetry.
+
+- **Fields**:
+  - `name: str` - Class name.
+  - `description: str` - What this engineer does.
+  - `version: str` - Component version.
+  - `execution_time_seconds: float` - Execution duration.
+  - `features_created: List[str]` - Column names appended.
+
+### 3. `FeatureEngineeringResult` (Dataclass)
+Collects pipeline-wide execution outputs.
+
+- **Fields**:
+  - `is_success: bool = True`
+  - `created_features: List[str]` - Consolidated list of all new columns.
+  - `warnings: List[str]` - Warnings generated (e.g., columns skipped).
+  - `statistics: Dict[str, Any]` - Summary metrics.
+  - `execution_metadata: Dict[str, EngineerMetadata]` - Maps engineer names to their telemetry.
+
+### 4. `BaseFeatureEngineer` (Abstract Base Class)
+Contract representing a single feature creation module.
+
+- **Methods**:
+  - `transform(self, df: pd.DataFrame, result: FeatureEngineeringResult) -> pd.DataFrame` (abstract)
+  - `get_definitions(self) -> List[FeatureDefinition]` (abstract)
+  - `@property name(self) -> str` (concrete getter)
+
+---
+
+## Concrete Feature Engineers
+
+1. **`NutritionFeatureEngineer`**:
+   - Calculates macronutrient densities per calorie/serving:
+     - `protein_density`, `carb_density`, `fat_density`, `fiber_density` (ratio of macro grams to calories).
+     - `protein_calorie_ratio` (protein grams / calories).
+     - `nutrition_score` (composite calculation: positive points for protein/fiber, negative for sodium/sugar/saturated fat).
+   - Infers categories: `is_high_protein` (protein contribution $>20\%$ calories), `is_low_carb`, `is_low_fat`, `is_low_sodium`, `is_high_fiber`.
+2. **`DietaryFeatureEngineer`**:
+   - Infers dietary categories based on ingredients lists and health/diet labels:
+     - `is_vegan`, `is_vegetarian`, `is_gluten_free`, `is_dairy_free`, `is_keto`, `is_halal`.
+     - `is_low_calorie` (calories $< 150$), `is_high_protein` (overlaps with nutrition).
+3. **`MealFeatureEngineer`**:
+   - Identifies classification flags: `is_breakfast`, `is_lunch`, `is_dinner`, `is_snack`, `is_dessert` by analyzing `meal_type` and `dish_type`.
+4. **`PriceFeatureEngineer`**:
+   - Computes: `budget_category`, `price_level`, `price_bucket` using price ranges.
+   - **Skip condition**: Automatically skips execution if the target `price` column is missing from `df.columns` (adds warning to `result`).
+5. **`MetadataFeatureEngineer`**:
+   - Creates counts: `ingredient_count`, `health_label_count`, `diet_label_count`.
+   - Creates character lengths: `recipe_name_length`, `description_length`.
+
+---
+
+## Coordinator: `FeatureEngineer`
+The main orchestrating pipeline.
+
+- **Pipeline Method**: `transform(self, df: pd.DataFrame) -> pd.DataFrame`
+  - Runs all engineers sequentially, passing the mutable `FeatureEngineeringResult` along.
+  - Updates the internal state `self.last_result` to store the telemetry for post-run retrieval (maintaining a simple single-transform call signature).
+- **Report Method**: `generate_report(self) -> None`
+  - Prints a console report detailing execution times, created features, statuses, and warnings.
+
+---
+
+## Scalability and SOLID Alignment
+
+* **Single Responsibility (SRP)**: Each child engineer handles one specific category (e.g. `PriceFeatureEngineer` only computes pricing levels).
+* **Open-Closed Principle (OCP)**: Adding a new domain (e.g. `HotelFeatureEngineer`) is done by implementing `BaseFeatureEngineer` and registering it in the pipeline, with zero modifications to existing classes.
+* **Dependency Injection**: The main `FeatureEngineer` takes a list of child engineers at construction time, allowing modular configurations and easy mock unit testing.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+* Create unit tests verifying:
+  - Vectorized operations compute expected values (e.g. `protein_density`).
+  - `PriceFeatureEngineer` skips cleanly when `price` column is missing.
+  - Pluggability of a mock custom engineer.
+  - Execution runtime metadata is generated correctly.

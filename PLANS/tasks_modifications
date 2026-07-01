@@ -1,0 +1,33 @@
+# DineAI Menu Intelligence Framework — Task Tracker
+
+## Phase 1: Capabilities Package (New)
+- [ ] `dine_ai/capabilities/base.py`         — BaseCapability, CapabilityResult, enums
+- [ ] `dine_ai/capabilities/definitions.py`  — 20 built-in capability implementations
+- [ ] `dine_ai/capabilities/registry.py`     — CapabilityRegistry + DEFAULT_REGISTRY
+- [ ] `dine_ai/capabilities/detector.py`     — CapabilityDetector + RestaurantCapabilityReport
+- [ ] `dine_ai/capabilities/__init__.py`     — Public surface
+
+## Phase 2: Adapters (Modified)
+- [ ] `schema_mapper.py`      — menu_item_name aliases + item_type column
+- [ ] `feature_engineering.py`— ItemTypeEngineer (auto-classify 12 item types)
+- [ ] `validator.py`          — 3-tier schema (Mandatory/Recommended/Optional)
+- [ ] `text_builder.py`       — item_type in search text; "Menu Item" language
+
+## Phase 3: Retrieval (Modified)
+- [ ] `ranking.py`   — required_column + proportional weight redistribution
+- [ ] `filtering.py` — required_column + capability-aware skip logic
+
+## Phase 4: LLM (Modified)
+- [ ] `prompts.py`   — available_columns guard + no-hallucination system prompt
+- [ ] `generator.py` — no-hallucination directive injection
+
+## Phase 5: Dataset Layer (Modified)
+- [ ] `dataset/metadata.py`  — capability_report + available_columns fields
+- [ ] `dataset/pipeline.py`  — Step 6b: CapabilityDetector
+- [ ] `dataset/manager.py`   — multi-filename CSV detection
+- [ ] `dataset/loader.py`    — capabilities + available_columns properties
+- [ ] `dataset/__init__.py`  — updated exports
+
+## Verification
+- [ ] `python -m dine_ai.capabilities.detector`     — capability detection self-tests
+- [ ] `python -m dine_ai.dataset.manager`           — 14 scenarios + menu_items.csv

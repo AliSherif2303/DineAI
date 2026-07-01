@@ -1,0 +1,68 @@
+# DineAI Evaluation Layer Implementation Plan
+
+Implement the lightweight, enterprise-quality evaluation layer for the DineAI Framework. This consists of two main testing components: **Integration Tests** and **End-to-End Tests**, located in `dine_ai/evaluations/integration_test.py` and `dine_ai/evaluations/end_to_end_test.py`.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> The evaluation framework consists of:
+> 1. **Integration Tests (`integration_test.py`)**:
+>    * Sequential verification of all 11 DineAI pipeline modules (Schema Mapper, Validator, Feature Engineering, Text Builder, Embedding Builder, FAISS Builder, Semantic Search, Filtering, Ranking, Prompt Builder, Generator) to guarantee clean, exception-free communication, correct input/output types, shape checks, and warnings tracing.
+>    * Executes end-to-end integration flows using synthetic/mock objects to avoid side-effects on primary datasets.
+> 2. **End-to-End Tests (`end_to_end_test.py`)**:
+>    * Simulates real user queries (e.g. keto, vegan, high protein, cheap, low calorie) traversing the full `DineAIApplication` orchestrator.
+>    * Verifies search, filter passing, reordering, prompt builder templates, and final response compilation without crashes.
+> 3. **Deterministic Constraints**:
+>    * Both suites will run deterministically using the deterministic `MockProvider` and the dynamic `MockEmbeddingModel`, with zero dependencies on external APIs (never loading Qwen).
+>    * Telemetry and health reports format results as PASS/FAIL indicators, overall percentages, and standard health rating terms (EXCELLENT, VERY GOOD, etc.).
+
+---
+
+## Proposed Changes
+
+### Component: evaluations
+
+#### [NEW] [integration_test.py](file:///d:/data/AI_WAITER/dine_ai/evaluations/integration_test.py)
+
+Contains:
+* **`IntegrationTestRunner`**: Contains individual stage test methods (`test_schema_mapping()`, `test_validation()`, `test_feature_engineering()`, `test_text_building()`, etc.) that execute and assert type conformity, dimensions, missing keys, and exception safety bounds.
+* **`IntegrationReport`**: Captures outcome lists and latency traces to print the analytical ASCII dashboard with health rating classifications.
+
+```mermaid
+graph TD
+    A[IntegrationTestRunner] -->|1. Test| B[SchemaMapper]
+    A -->|2. Test| C[Validator]
+    A -->|3. Test| D[FeatureEngineering]
+    A -->|4. Test| E[TextBuilder]
+    A -->|5. Test| F[EmbeddingBuilder]
+    A -->|6. Test| G[FAISSBuilder]
+    A -->|7. Test| H[SemanticSearchEngine]
+    A -->|8. Test| I[FilteringEngine]
+    A -->|9. Test| J[RankingEngine]
+    A -->|10. Test| K[PromptBuilder]
+    A -->|11. Test| L[GeneratorEngine]
+```
+
+#### [NEW] [end_to_end_test.py](file:///d:/data/AI_WAITER/dine_ai/evaluations/end_to_end_test.py)
+
+Contains:
+* **`EndToEndTestRunner`**: Executes a predefined catalog of realistic query permutations (vegan, keto, high protein, halal chicken, low sodium) against a mock-configured initialized `DineAIApplication`.
+* **`EndToEndReport`**: Formats overall scores, latencies (fastest/slowest/averages for retrieval and generation), and prints query blocks showing selected targets, scores, and status flags.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+Run the integration and end-to-end suites:
+```bash
+python -m dine_ai.evaluations.integration_test
+python -m dine_ai.evaluations.end_to_end_test
+```
+
+Confirm that:
+* All 11 modules integrate correctly.
+* Performance indicators print correct percentages, times, and health levels (e.g. 100% → EXCELLENT).
+* The suites exit with clean code 0 on pass, or 1 on failures.

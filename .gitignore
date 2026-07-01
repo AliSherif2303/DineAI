@@ -1,0 +1,60 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environment
+venv/
+.env
+.env.*
+
+# IDE
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# Logs
+logs/
+*.log
+
+# Temporary
+tmp/
+temp/
+
+# Cache
+.cache/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Generated datasets
+*.pkl
+*.npy
+*.index
+faiss.index
+metadata.json
+
+# Local datasets (optional)
+dine_ai/datasets/**/recipes.pkl
+dine_ai/datasets/**/embeddings.npy
+dine_ai/datasets/**/faiss.index
+dine_ai/datasets/**/metadata.json
+
+# HuggingFace cache
+models/
+checkpoints/
+
+# Pytest
+.pytest_cache/
+
+# Coverage
+.coverage
+htmlcov/

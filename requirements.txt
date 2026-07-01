@@ -1,0 +1,67 @@
+﻿# =============================================================================
+# DineAI — requirements.txt
+# Python 3.10+
+# =============================================================================
+# Install core only (offline / mock mode):
+#   pip install -r requirements.txt
+#
+# Install with real sentence-transformer embeddings:
+#   pip install -r requirements.txt sentence-transformers
+#
+# Install with local HuggingFace LLM inference (Qwen, LLaMA, Mistral):
+#   pip install -r requirements.txt torch transformers accelerate bitsandbytes
+#
+# Install with a cloud LLM API:
+#   pip install openai          # for OpenAI / GPT
+#   pip install anthropic       # for Anthropic Claude
+#   pip install google-generativeai  # for Google Gemini
+#   pip install ollama          # for local Ollama server
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# CORE — required for all modes (mock embedding + mock LLM)
+# -----------------------------------------------------------------------------
+
+# Numerical & data
+numpy==2.2.6
+pandas==2.3.3
+
+# FAISS vector store
+faiss-cpu==1.14.3
+
+# Serialisation / config
+PyYAML==6.0.3
+
+
+# -----------------------------------------------------------------------------
+# EMBEDDING — required for real SentenceTransformer embeddings
+# (only needed when embedding_provider != "mock")
+# -----------------------------------------------------------------------------
+
+# Uncomment to install:
+# sentence-transformers>=2.2.2
+
+
+# -----------------------------------------------------------------------------
+# LOCAL LLM — required for on-device HuggingFace model inference
+# (only needed when llm_provider is "qwen", "llama", or "mistral")
+# -----------------------------------------------------------------------------
+
+# Uncomment to install:
+# torch>=2.0.0
+# transformers>=4.40.0
+# accelerate>=0.30.0
+# bitsandbytes>=0.43.0   # 4-bit / 8-bit quantisation (Linux/WSL only)
+
+
+# -----------------------------------------------------------------------------
+# LLM API CLIENTS — required only when using the corresponding cloud provider
+# (providers are currently placeholder stubs; install the relevant package
+#  when you implement a concrete provider)
+# -----------------------------------------------------------------------------
+
+# pip install openai            # OpenAI / GPT
+# pip install anthropic         # Anthropic Claude
+# pip install google-generativeai  # Google Gemini
+# pip install ollama            # Local Ollama server

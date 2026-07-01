@@ -1,0 +1,104 @@
+# DineAI Application Orchestrator Framework Implementation Plan
+
+Implement an enterprise-grade backend application orchestration layer in [app.py](file:///d:/data/AI_WAITER/dine_ai/app.py). This layer will manage global configuration, state transitions, event emission, multiple restaurants and datasets loading, session conversation log memories, and pipeline execution traces. The pipeline uses a Stage pattern where stages wrap the core subsystem modules. It conforms strictly to SOLID design principles, Clean Architecture, and Strategy/Factory patterns.
+
+---
+
+## User Review Required
+
+> [!IMPORTANT]
+> The app orchestration framework consists of:
+> 1. **Configuration & State**: `ApplicationConfig` and `ApplicationState` structures validating parameter boundaries and tracking engine initialization stages.
+> 2. **Subsystems Management**:
+>    * `RestaurantManager`: Asset validations and loading of Pickled datasets, FAISS indexes, and configs for multiple restaurants.
+>    * `ConversationManager`: Tracks session messages, reset logic, and conversation memory.
+> 3. **Pipeline Stage Architecture (Open/Closed Stage Plugin)**:
+>    * Abstract `BasePipelineStage` enforcing execution validation parameters.
+>    * 5 concrete pipeline stage plugins wrapping core retrieval, prompts, and generator features.
+>    * `PipelineManager`: Execution orchestrator mapping inputs/outputs through stages via a shared `PipelineContext` DTO, monitoring errors, and tracing performance metrics.
+> 4. **Application Interface**: `DineAIApplication` coordinating events, logs, initialization, chat loops, and status summaries.
+> 5. **Telemetry Reporting**: `EnterpriseApplicationReport` combining uptime metrics, stage performance, and health status indicators.
+
+---
+
+## Proposed Changes
+
+### Component: dine_ai
+
+#### [MODIFY] [app.py](file:///d:/data/AI_WAITER/dine_ai/app.py)
+
+We will rewrite `app.py` to contain the full production implementation of the following classes:
+
+```mermaid
+classDiagram
+    direction TB
+    class DineAIApplication {
+        +ApplicationConfig config
+        +ApplicationState state
+        +RestaurantManager restaurant_manager
+        +ConversationManager conversation_manager
+        +PipelineManager pipeline_manager
+        +initialize()
+        +chat(session_id, query) GenerationResponse
+        +status() Dict
+    }
+    class RestaurantManager {
+        +load_restaurant(name)
+        +get_assets() Dict
+    }
+    class ConversationManager {
+        +get_history(session_id) List
+        +add_message(session_id, role, text)
+    }
+    class PipelineManager {
+        +register_stage(BasePipelineStage)
+        +execute(PipelineContext) PipelineContext
+    }
+    class BasePipelineStage {
+        <<abstract>>
+        +execute(PipelineContext) PipelineContext
+        +validate_input()
+        +validate_output()
+    }
+    
+    DineAIApplication --> RestaurantManager : delegates assets
+    DineAIApplication --> ConversationManager : delegates session
+    DineAIApplication --> PipelineManager : executes pipelines
+    PipelineManager --> BasePipelineStage : runs stages
+```
+
+##### Phase-by-Phase Implementation Steps:
+1. **Phase 1: Configs, States, Events, and Telemetry DTOs**
+   * Implement `ApplicationConfig`, `ApplicationState`, `ApplicationEventType`, and `ApplicationEvent`.
+   * Implement `PipelineContext` and `PipelineTrace`.
+2. **Phase 2: Managers (Restaurant & Conversation)**
+   * Implement `RestaurantManager` reading dataset assets (pickle, FAISS index, and config).
+   * Implement `ConversationManager` maintaining session history arrays.
+3. **Phase 3: Pipeline Stage Architecture & Implementations**
+   * Define abstract `BasePipelineStage` with validation hooks.
+   * Implement concrete stages: `SemanticSearchStage`, `FilteringStage`, `RankingStage`, `PromptBuilderStage`, and `GeneratorStage`.
+4. **Phase 4: PipelineManager & Dynamic Stage Registration**
+   * Implement `PipelineManager` to register, execute, reorder, replace, or list execution stages safely under error boundaries.
+5. **Phase 5: Application orchestrator & Reporting**
+   * Implement `DineAIApplication` coordinating states, health checking, and query dispatches.
+   * Implement `EnterpriseApplicationReport` for metric analysis.
+   * Implement the complete self-test block verifying startup, shutdown, stages registry, query dispatches, and reports.
+
+---
+
+## Verification Plan
+
+### Automated Tests
+Run the standalone self-test suite:
+```bash
+python dine_ai/app.py
+```
+
+Self-tests implemented in `run_self_tests()` will cover:
+* **Configuration validation and DTO serialization**.
+* **RestaurantManager switching** and catalog verification.
+* **ConversationManager memory log updates**.
+* **Stage registrations** (adding/removing intent extraction stubs).
+* **Pipeline execution integration** verifying end-to-end trace steps.
+* **Health check report compiler validation**.
+* **Enterprise reporting summary output format validation**.
