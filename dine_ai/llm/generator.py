@@ -720,13 +720,25 @@ class HuggingFaceProvider(BaseLLMProvider):
             if config.seed is not None:
                 torch.manual_seed(config.seed)
 
+            print("\n" + "=" * 120)
+            print("GENERATION CONFIG")
+            print("=" * 120)
+            print(gen_kwargs)
+            print("=" * 120)
+
             with torch.no_grad():
                 outputs = self.model.generate(**inputs, **gen_kwargs)
             
             input_len = inputs["input_ids"].shape[1]
             generated_ids = outputs[0][input_len:]
             
-            return self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+            decoded = self.tokenizer.decode(generated_ids, skip_special_tokens=True)
+            print("\n" + "=" * 120)
+            print("RAW MODEL OUTPUT")
+            print("=" * 120)
+            print(decoded)
+            print("=" * 120)
+            return decoded
         except Exception as e:
             logger.error(f"HuggingFaceProvider: Text generation encountered an exception: {e}")
             raise RuntimeError(f"HuggingFace generation failed: {e}") from e

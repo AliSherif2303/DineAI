@@ -639,7 +639,69 @@ class GeneratorStage(BasePipelineStage):
             prompt_result=context.prompt_result,
             generation_config=GenerationConfig()
         )
+
+        print("\n" + "=" * 120)
+        print("RANKED CANDIDATES")
+        print("=" * 120)
+
+        if context.ranked_candidates:
+            for i, candidate in enumerate(context.ranked_candidates, 1):
+
+                meta = {}
+
+                if hasattr(candidate, "metadata"):
+                    meta = candidate.metadata
+
+                elif hasattr(candidate, "candidate") and hasattr(candidate.candidate, "metadata"):
+                    meta = candidate.candidate.metadata
+
+                print(f"\nCandidate #{i}")
+
+                print("Recipe:",
+                      meta.get(
+                          "recipe_name",
+                          meta.get("name", "UNKNOWN")
+                      ))
+
+                print("Score:",
+                      getattr(candidate, "score", "N/A"))
+
+                print("Price:",
+                      meta.get("price"))
+
+                print("Calories:",
+                      meta.get("calories_per_serving"))
+
+                print("Protein:",
+                      meta.get("protein_g_per_serving"))
+
+        else:
+            print("NO RANKED CANDIDATES")
+
+        print("=" * 120)
+
+        print("\n" + "=" * 120)
+        print("FINAL PROMPT SENT TO LLM")
+        print("=" * 120)
+
+        if context.prompt_result is not None:
+            print(context.prompt_result.final_prompt)
+        else:
+            print("PromptResult is None")
+
+        print("=" * 120)
+
+        generation_start = time.perf_counter()
+
         gen_res = engine.generate(request)
+
+        generation_end = time.perf_counter()
+
+        print("=" * 120)
+        print("GENERATION TIME")
+        print("=" * 120)
+        print(f"{generation_end - generation_start:.2f} seconds")
+        print("=" * 120)
         context.generation_response = gen_res
 
         elapsed = time.perf_counter() - start
