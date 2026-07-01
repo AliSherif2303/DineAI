@@ -426,6 +426,7 @@ class ConversationPrompt(BasePromptComponent):
             
         if context.query:
             lines.append(f"Current User Query: {context.query}")
+            lines.append("Assistant:")
             
         return "\n".join(lines).strip()
 
