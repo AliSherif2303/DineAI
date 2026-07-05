@@ -190,6 +190,7 @@ class PipelineContext:
     warnings: List[str] = field(default_factory=list)
     metrics: Dict[str, Any] = field(default_factory=dict)
     trace: PipelineTrace = field(default_factory=PipelineTrace)
+    available_columns: List[str] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         """Serializes the pipeline context and its trace payload to a dictionary representation."""
@@ -597,7 +598,8 @@ class PromptBuilderStage(BasePipelineStage):
         prompt_ctx = PromptContext(
             query=context.original_query,
             ranked_candidates=context.ranked_candidates,
-            conversation_history=context.conversation_history
+            conversation_history=context.conversation_history,
+            available_columns=context.available_columns
         )
         builder.set_context(prompt_ctx)
 
@@ -1002,7 +1004,8 @@ class DineAIApplication:
         # Build execution context
         context = PipelineContext(
             original_query=query,
-            conversation_history=history
+            conversation_history=history,
+            available_columns=self.restaurant_manager.available_columns
         )
 
         # Inject runtime filtering rules if provided

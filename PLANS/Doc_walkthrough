@@ -1,0 +1,48 @@
+# Walkthrough — Documentation Simplification + Developer Edit Guide
+
+## What Was Done
+
+### Job 1 — Plain-English Rewrite (37 files total)
+
+Every `.md` file in `Documentations/` was rewritten. The rewrites:
+- Replaced jargon with plain-English analogies (kitchen stations, phone directories, bouncer at a door, etc.)
+- Added concrete examples showing actual data (sample CSV rows, prompt text, output structures)
+- Added tables for all settings, operators, and fields
+- Added "What breaks if this is skipped?" and "When to run this?" callouts
+- Preserved all technical accuracy — nothing was dumbed down incorrectly
+
+Files rewritten:
+- 11 core docs (`README.md`, `00` through `09`)
+- 20 module docs (`Modules/*.md`)
+- 6 evaluation docs (`Evaluations/*.md`)
+
+### Job 2 — Developer Edit Guide (1 new file)
+
+**New file:** [`10_Developer_Edit_Guide.md`](file:///d:/data/AI_WAITER/Documentations/10_Developer_Edit_Guide.md)
+
+Contains:
+- **Quick Lookup Table** — ~30 rows mapping "I want to..." → file → exact location
+- **Section 1: Menu Data Changes** — adding restaurants, column aliases, dietary flags, price brackets
+- **Section 2: AI Behavior Changes** — personas, languages, response length, temperature, providers
+- **Section 3: Search & Retrieval Changes** — top_k, ranking weights, filter operators
+- **Section 4: System Configuration** — settings reference and embedding model changes
+- **Section 5: Adding Tests** — scenario tests and integration checks
+- **Section 6: Architecture Changes** — adding pipeline stages
+- **File Edit Risk Guide** — color-coded risk table for every file (`🟢 Low`, `🟡 Medium`, `🔴 High`)
+
+---
+
+## Key Design Decisions
+
+1. **No jargon without explanation** — Every technical term is immediately followed by a plain-English equivalent
+2. **Organized by goal, not by file** — The developer guide asks "what do you want to do?" not "which file do you want to read?"
+3. **Copy-paste ready** — All code examples in the developer guide are complete and ready to use, not pseudocode stubs
+4. **Risk-rated edits** — The risk guide helps developers understand the blast radius of their changes before making them
+
+---
+
+## What Wasn't Changed
+
+- No source code was modified
+- No file was deleted or renamed
+- The folder structure of `Documentations/` is unchanged (one new file added: `10_Developer_Edit_Guide.md`)

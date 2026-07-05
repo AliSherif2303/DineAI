@@ -109,7 +109,8 @@ def run_scenarios():
         for sc in scenarios:
             ctx = PipelineContext(
                 original_query=sc["query"],
-                conversation_history=[]
+                conversation_history=[],
+                available_columns=app.restaurant_manager.available_columns
             )
             # Apply filtering rules via stage replacement
             from dine_ai.app import FilteringStage

@@ -256,6 +256,48 @@ def is_field_available(col: str, context: PromptContext) -> bool:
     return col in context.available_columns
 
 
+def _is_missing(val: Any) -> bool:
+    """Helper to check if a metadata value is considered missing, None, or empty."""
+    if val is None:
+        return True
+    if isinstance(val, str):
+        v = val.strip().lower()
+        return v in ("", "none", "n/a", "unknown")
+    if isinstance(val, (list, tuple, dict, set)):
+        return len(val) == 0
+    try:
+        import math
+        if isinstance(val, float) and math.isnan(val):
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def get_label(key: str, labels: Dict[str, str]) -> str:
+    """Looks up key in dynamic translation labels dictionary, falling back to English title-casing."""
+    if key in labels:
+        return labels[key]
+    english_fallbacks = {
+        "recipe_name": "Recipe Name",
+        "price": "Price",
+        "calories": "Calories",
+        "protein": "Protein",
+        "preparation_time": "Preparation Time",
+        "rating": "Rating",
+        "popularity": "Popularity",
+        "diet_labels": "Diet Labels",
+        "health_labels": "Health Labels",
+        "cuisine": "Cuisine",
+        "meal_type": "Meal Type",
+        "item_type": "Item Type",
+        "availability": "Availability",
+        "ingredients": "Ingredients",
+        "description": "Description"
+    }
+    return english_fallbacks.get(key, key.replace("_", " ").title())
+
+
 class ContextPrompt(BasePromptComponent):
     """Formats the retrieved menu candidates context and localizes headers dynamically."""
     
@@ -274,29 +316,85 @@ class ContextPrompt(BasePromptComponent):
         
         for rc in context.ranked_candidates:
             meta = _get_metadata(rc)
-            name = meta.get("name", "Unknown Dish")
-            protein = meta.get("protein", meta.get("protein_g_per_serving", "N/A"))
-            calories = meta.get("calories", meta.get("calories_per_serving", "N/A"))
-            price = meta.get("price", "N/A")
-            ingredients = meta.get("ingredients", [])
-            description = meta.get("description", "")
-            
-            if isinstance(ingredients, list):
-                ing_str = ", ".join(ingredients)
-            else:
-                ing_str = str(ingredients)
-                
-            lines.append(f"- {labels['recipe_name']}: {name}")
-            if is_field_available("protein_g_per_serving", context):
-                lines.append(f"  {labels['protein']}: {protein}")
-            if is_field_available("calories_per_serving", context):
-                lines.append(f"  {labels['calories']}: {calories}")
-            if is_field_available("price", context):
-                lines.append(f"  {labels['price']}: {price}")
-            if is_field_available("ingredients", context):
-                lines.append(f"  {labels['ingredients']}: {ing_str}")
-            if is_field_available("description", context) and description:
-                lines.append(f"  {labels['description']}: {description}")
+            name = meta.get("name", meta.get("recipe_name"))
+            if _is_missing(name):
+                name = "Unknown Dish"
+
+            lines.append(f"- {get_label('recipe_name', labels)}: {name}")
+
+            # Price
+            price = meta.get("price")
+            if not _is_missing(price) and is_field_available("price", context):
+                lines.append(f"  {get_label('price', labels)}: {price}")
+
+            # Calories
+            calories = meta.get("calories", meta.get("calories_per_serving"))
+            if not _is_missing(calories) and is_field_available("calories_per_serving", context):
+                lines.append(f"  {get_label('calories', labels)}: {calories}")
+
+            # Protein
+            protein = meta.get("protein", meta.get("protein_g_per_serving"))
+            if not _is_missing(protein) and is_field_available("protein_g_per_serving", context):
+                lines.append(f"  {get_label('protein', labels)}: {protein}")
+
+            # Preparation Time
+            prep_time = meta.get("preparation_time_minutes", meta.get("prep_time"))
+            if not _is_missing(prep_time) and is_field_available("preparation_time_minutes", context):
+                lines.append(f"  {get_label('preparation_time', labels)}: {prep_time} minutes")
+
+            # Rating
+            rating = meta.get("rating")
+            if not _is_missing(rating) and is_field_available("rating", context):
+                lines.append(f"  {get_label('rating', labels)}: {rating}")
+
+            # Popularity
+            pop = meta.get("popularity")
+            if not _is_missing(pop) and is_field_available("popularity", context):
+                lines.append(f"  {get_label('popularity', labels)}: {pop}")
+
+            # Diet Labels
+            diet = meta.get("diet_labels")
+            if not _is_missing(diet) and is_field_available("diet_labels", context):
+                d_str = ", ".join(diet) if isinstance(diet, list) else str(diet)
+                lines.append(f"  {get_label('diet_labels', labels)}: {d_str}")
+
+            # Health Labels
+            health = meta.get("health_labels")
+            if not _is_missing(health) and is_field_available("health_labels", context):
+                h_str = ", ".join(health) if isinstance(health, list) else str(health)
+                lines.append(f"  {get_label('health_labels', labels)}: {h_str}")
+
+            # Cuisine
+            cuisine = meta.get("cuisine_type", meta.get("cuisine"))
+            if not _is_missing(cuisine) and is_field_available("cuisine_type", context):
+                lines.append(f"  {get_label('cuisine', labels)}: {cuisine}")
+
+            # Meal Type
+            meal = meta.get("meal_type")
+            if not _is_missing(meal) and is_field_available("meal_type", context):
+                lines.append(f"  {get_label('meal_type', labels)}: {meal}")
+
+            # Item Type
+            item = meta.get("item_type")
+            if not _is_missing(item) and is_field_available("item_type", context):
+                lines.append(f"  {get_label('item_type', labels)}: {item}")
+
+            # Availability
+            avail = meta.get("availability", meta.get("is_available"))
+            if not _is_missing(avail) and (is_field_available("availability", context) or is_field_available("is_available", context)):
+                lines.append(f"  {get_label('availability', labels)}: {avail}")
+
+            # Ingredients
+            ingredients = meta.get("ingredients")
+            if not _is_missing(ingredients) and is_field_available("ingredients", context):
+                ing_str = ", ".join(ingredients) if isinstance(ingredients, list) else str(ingredients)
+                lines.append(f"  {get_label('ingredients', labels)}: {ing_str}")
+
+            # Description
+            desc = meta.get("description")
+            if not _is_missing(desc) and is_field_available("description", context):
+                lines.append(f"  {get_label('description', labels)}: {desc}")
+
             lines.append("")
             
         return "\n".join(lines).strip()
@@ -388,6 +486,8 @@ class RecommendationPrompt(BasePromptComponent):
 
     def build(self, context: PromptContext) -> str:
         policies = ["[Recommendation Policy]", "Explain WHY the menu item was selected for the guest."]
+        policies.append("If multiple candidates exist, briefly compare them to highlight their trade-offs (e.g., highest protein, lowest calories, or price differences) to help the guest choose.")
+        
         if is_field_available("protein_g_per_serving", context):
             policies.append("Mention protein contents.")
         if is_field_available("calories_per_serving", context):
@@ -727,15 +827,37 @@ class TokenBudgetManager:
         decisions: List[str]
     ) -> None:
         """Dynamically trims few-shot context, conversation logs, and metadata to fit the budget."""
-        # Simple helper to measure context string representation length
+        # Performance optimization: cache resolved candidate metadata to prevent redundant lookups
+        metadata_cache = {}
+        def get_cached_metadata(rc: Any) -> Dict[str, Any]:
+            rc_id = id(rc)
+            if rc_id not in metadata_cache:
+                metadata_cache[rc_id] = _get_metadata(rc)
+            return metadata_cache[rc_id]
+
         def get_estimate() -> int:
-            total_str = (
+            # Measure actual query and history
+            base_str = (
                 str(context.query) + 
                 str(context.conversation_history) + 
-                str(context.ranked_candidates) + 
                 str(context.custom_data.get("few_shot_examples", ""))
             )
-            return cls.estimate_tokens(total_str)
+            base_tokens = cls.estimate_tokens(base_str)
+            
+            # Measure the estimated prompt text size of candidates
+            candidate_tokens = 0
+            for rc in context.ranked_candidates:
+                meta = get_cached_metadata(rc)
+                item_len = (
+                    # Avoid None strings by falling back to empty string
+                    len(str(meta.get("name", meta.get("recipe_name", "")))) +
+                    len(str(meta.get("description", ""))) +
+                    len(str(meta.get("ingredients", ""))) +
+                    200  # padding for metadata fields formatting
+                )
+                candidate_tokens += cls.estimate_tokens(str(item_len * "a"))
+                
+            return base_tokens + candidate_tokens
 
         # 1. Trim few-shot examples first
         if get_estimate() > max_tokens and context.custom_data.get("few_shot_examples"):
